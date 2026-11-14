@@ -16,6 +16,17 @@ class ProductTypeRead(ProductTypeBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+# --- Location Schemas ---
+class LocationBase(BaseModel):
+    name: str = Field(..., max_length=50)
+    capacity: int | None = Field(None, ge=0)
+
+class LocationCreate(LocationBase):
+    pass
+
+class LocationRead(LocationBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Product and Characteristics Schemas ---
 class ProductBase(BaseModel):
@@ -28,6 +39,7 @@ class ProductBase(BaseModel):
     weight: float | None = Field(None, ge=0)
     quantity: int | None = Field(None, ge=0)
     product_type_id: int | None = None
+    location_id: int | None = None
 
 class ProductCreate(ProductBase):
     """Schema for registering a new product."""
@@ -42,10 +54,12 @@ class ProductUpdate(BaseModel):
     weight: float | None = Field(None, ge=0)
     quantity: int | None = Field(None, ge=0)
     product_type_id: int | None = None
+    location_id: int | None = None
 
 class ProductRead(ProductBase):
-    """Schema for reading product data, including nested category info."""
+    """Schema for reading product data, including nested category and location info."""
     id: int
     product_type: ProductTypeRead | None = None 
+    location: LocationRead | None = None
 
     model_config = ConfigDict(from_attributes=True)

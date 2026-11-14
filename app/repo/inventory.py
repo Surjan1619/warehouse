@@ -1,61 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select
 from fastapi import HTTPException
 from app.models.Alchemy_models import Product, Movement
-from typing import Optional
-
-async def cut_product(db: AsyncSession, source_id: int, cut_length: float, pieces: int):
-    """
-    Process a product cut operation.
-    Decrements source quantity, finds or creates the result product, 
-    and logs the inventory movements.
-    """
-    # 1. Fetch source product
-    result = await db.execute(select(Product).where(Product.id == source_id))
-    source = result.scalar_one_or_none()
-    
-    if not source or (source.quantity or 0) < 1:
-        raise HTTPException(status_code=400, detail="Product not found or out of stock")
-
-    # 2. Decrement source product quantity and log movement
-    source.quantity -= 1
-    db.add(Movement(product_id=source.id, change_type="cut_source", quantity_changed=-1))
-
-    # 3. Find or create result product (based on characteristics)
-    result_query = select(Product).where(
-        Product.product_type_id == source.product_type_id,
-        Product.shape == source.shape,
-        Product.width == source.width,
-        Product.thickness == source.thickness,
-        Product.weight == source.weight,
-        Product.length == cut_length
-    )
-    result = await db.execute(result_query)
-    target = result.scalar_one_or_none()
-
-    if target:
-        # Update existing target product
-        target.quantity = (target.quantity or 0) + pieces
-        target_id = target.id
-    else:
-        # Create new target product record
-        new_prod = Product(
-            product_type_id=source.product_type_id,
-            shape=source.shape,
-            width=source.width,
-            thickness=source.thickness,
-            weight=source.weight,
-            length=cut_length,
-            quantity=pieces
-        )
-        db.add(new_prod)
-        await db.flush() # Flush to assign database ID to new_prod
-        target_id = new_prod.id
-    
-    # Log result movement
-    db.add(Movement(product_id=target_id, change_type="cut_result", quantity_changed=pieces))
-    await db.commit()
-    return target_id, (target.quantity if target else pieces)
 
 async def sell_product(db: AsyncSession, product_id: int, quantity: int):
     """Process a sale: verify stock, decrement quantity, and log movement."""

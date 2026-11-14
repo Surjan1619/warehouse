@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -11,25 +11,12 @@ from app.repo.crud import (
     delete_product,
     delete_product_type
 )
-
-# ... (rest of imports)
-
-@router.delete("/{product_id}")
-async def remove_product(product_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a product."""
-    success = await delete_product(db, product_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return {"message": "Product deleted"}
-
-@router.delete("/types/{type_id}")
-async def remove_product_type(type_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a product type if not in use."""
-    success = await delete_product_type(db, type_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Cannot delete type: in use or not found")
-    return {"message": "Type deleted"}
-from app.schemas.product import ProductRead, ProductCreate, ProductTypeRead, ProductTypeCreate
+from app.schemas.product import (
+    ProductRead, 
+    ProductCreate, 
+    ProductTypeRead, 
+    ProductTypeCreate
+)
 
 router = APIRouter()
 
@@ -56,9 +43,26 @@ async def add_product(product_in: ProductCreate, db: AsyncSession = Depends(get_
         name=product_in.name,
         quantity=product_in.quantity or 0, 
         product_type_id=product_in.product_type_id,
+        location_id=product_in.location_id,
         length=product_in.length,
         width=product_in.width,
         thickness=product_in.thickness,
         shape=product_in.shape,
         weight=product_in.weight
     )
+
+@router.delete("/{product_id}")
+async def remove_product(product_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete a product."""
+    success = await delete_product(db, product_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"message": "Product deleted"}
+
+@router.delete("/types/{type_id}")
+async def remove_product_type(type_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete a product type if not in use."""
+    success = await delete_product_type(db, type_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot delete type: in use or not found")
+    return {"message": "Type deleted"}
