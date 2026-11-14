@@ -17,7 +17,7 @@ uvicorn app.main:app --reload
 alembic upgrade head
 alembic revision --autogenerate -m "описание"
 
-# Первый администратор
+# Администратор: создаёт его или меняет пароль по ADMIN_USERNAME / ADMIN_PASSWORD из .env
 python scripts/create_admin.py
 
 # Фронтенд (http://localhost:5173)
@@ -37,7 +37,7 @@ docker compose exec backend alembic revision --autogenerate -m "описание
 docker compose up -d db      # только база, остальное локально
 ```
 
-Compose берёт `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `JWT_SECRET` из `.env` (образец — `.env.example`) и сам подставляет бэкенду `DATABASE_URL` с хостом `db`.
+Compose берёт `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` из `.env` (образец — `.env.example`) и сам подставляет бэкенду `DATABASE_URL` с хостом `db`.
 
 Тестов в проекте нет. Проверять изменения нужно вручную: Swagger на `/docs` или фронтенд.
 
@@ -59,8 +59,12 @@ app/
   schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory
 alembic/versions/          # миграции
 scripts/create_admin.py
-frontend/src/App.jsx       # роуты и все страницы
+frontend/src/App.jsx       # маршруты, вход, главная, пользователи
 frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
+frontend/src/hooks.js      # useList, useAction — общая логика страниц
+frontend/src/labels.js     # русские названия ролей и статусов
+frontend/src/components/   # Layout (шапка), Messages (ошибка / успех)
+frontend/src/pages/        # StockPage, ProductsPage, CatalogPage
 ```
 
 ## Правила работы с кодом
@@ -77,6 +81,7 @@ frontend/src/api.js        # вызовы API, сессия (токен и по�
 - **Права.** Роли — `admin` и `worker`. Для действий только администратора использовать `Depends(require_admin)`. Скрытие кнопок во фронтенде защитой не считается.
 - **Пользователей не удалять**, а отключать через `is_active`: на них ссылается `cut_operations.user_id`.
 - **БД — только PostgreSQL**: используется `JSONB` и драйвер `asyncpg`.
+- **Новая страница фронтенда** — отдельный файл в `frontend/src/pages/`, маршрут в `App.jsx`, ссылка в `components/Layout.jsx`. Списки загружать через `useList`, действия выполнять через `useAction`, как в `pages/ProductsPage.jsx`. Файл с компонентами не должен экспортировать ничего, кроме компонентов (правило oxlint), константы класть в `labels.js`.
 - **Фронтенд.** Запросы делать через `api()` из `frontend/src/api.js`, а не через `fetch` напрямую: она добавляет токен и обрабатывает 401. Адрес API задаётся в `VITE_API_URL` (по умолчанию `http://localhost:8000`). CORS на бэкенде разрешает только `http://localhost:5173`.
 - **Секреты.** `.env` в git не попадает. Значения из него не выводить и не коммитить.
 
@@ -86,7 +91,7 @@ frontend/src/api.js        # вызовы API, сессия (токен и по�
 
 - Окружение собрано под Python 3.14. При обновлении зависимостей проверять совместимость с ним: `asyncpg` ниже 0.32 и `sqlalchemy` ниже 2.0.57 из прежнего `requirements.txt` на 3.14 не работали.
 - PostgreSQL на машине разработчика не установлен, база работает только в Docker (`docker compose up -d db`).
-- Фронтенд пока не знает о материалах, заказах, заготовках и резке: для них есть только API.
+- Во фронтенде есть приход заготовок, товары и справочники. Заказов, резки, резерва и истории заготовки там нет: для них есть только API.
 - `AuthMiddleware` должен добавляться в `main.py` раньше `CORSMiddleware` и возвращать `JSONResponse`, а не бросать `HTTPException`: исключение из middleware превращается в 500.
 - Открытой регистрации нет: первого администратора создаёт `scripts/create_admin.py`, остальных — администратор.
 - Работник (`worker`) пока может всё, кроме управления пользователями.

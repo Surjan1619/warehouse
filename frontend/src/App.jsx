@@ -1,9 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import './App.css';
-import { api, login, getToken, getUser, clearSession, isAdmin } from './api';
-
-const ROLE_LABELS = { admin: 'Администратор', worker: 'Работник склада' };
+import { api, login, getToken, getUser, isAdmin } from './api';
+import { Layout } from './components/Layout';
+import { ROLE_LABELS } from './labels';
+import { ProductsPage } from './pages/ProductsPage';
+import { StockPage } from './pages/StockPage';
+import { CatalogPage } from './pages/CatalogPage';
 
 // 1. Защита маршрутов: нужен вход, а для adminOnly — ещё и роль администратора.
 // Это только удобство интерфейса: права проверяет сервер.
@@ -11,39 +14,6 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   if (!getToken()) return <Navigate to="/login" replace />;
   if (adminOnly && !isAdmin(getUser())) return <Navigate to="/home" replace />;
   return children;
-};
-
-// Общая рамка страниц: шапка с именем пользователя и выходом
-const Layout = ({ title, children }) => {
-  const navigate = useNavigate();
-  const user = getUser();
-
-  const logout = () => {
-    clearSession();
-    navigate('/login');
-  };
-
-  return (
-    <div className="page">
-      <header className="topbar">
-        <Link to="/home" className="brand">WMS</Link>
-        <nav>
-          <Link to="/products">Товары</Link>
-          {isAdmin(user) && <Link to="/admin">Пользователи</Link>}
-        </nav>
-        <div className="topbar-user">
-          <span>
-            {user?.username} <span className="badge">{ROLE_LABELS[user?.role] || user?.role}</span>
-          </span>
-          <button className="btn btn-ghost" onClick={logout}>Выход</button>
-        </div>
-      </header>
-      <main className="content">
-        <h1>{title}</h1>
-        {children}
-      </main>
-    </div>
-  );
 };
 
 // 2. Страница входа
@@ -104,9 +74,17 @@ const HomePage = () => {
   return (
     <Layout title="Главная">
       <div className="tiles">
+        <Link to="/stock" className="tile">
+          <h2>Заготовки</h2>
+          <p>Приход труб и профилей, остатки по длинам</p>
+        </Link>
         <Link to="/products" className="tile">
           <h2>Товары</h2>
-          <p>Просмотр остатков на складе</p>
+          <p>Штучные товары: добавление и остатки</p>
+        </Link>
+        <Link to="/catalog" className="tile">
+          <h2>Справочники</h2>
+          <p>Материалы, типы товаров, места хранения</p>
         </Link>
         {isAdmin(user) && (
           <Link to="/admin" className="tile">
@@ -115,31 +93,6 @@ const HomePage = () => {
           </Link>
         )}
       </div>
-    </Layout>
-  );
-};
-
-// 4. Страница просмотра товаров
-const ProductsPage = () => {
-  const [products, setProducts] = useState([]);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    api('/products/').then(setProducts).catch((err) => setError(err.message));
-  }, []);
-
-  return (
-    <Layout title="Список товаров">
-      {error && <p className="error" role="alert">{error}</p>}
-      {products.length === 0 && !error ? (
-        <p className="muted">Товаров пока нет</p>
-      ) : (
-        <ul className="list">
-          {products.map((p) => (
-            <li key={p.id}>{p.name} — {p.quantity} шт.</li>
-          ))}
-        </ul>
-      )}
     </Layout>
   );
 };
@@ -287,7 +240,9 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+        <Route path="/stock" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
+        <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

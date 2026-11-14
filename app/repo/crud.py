@@ -146,7 +146,10 @@ async def get_all_locations(db: AsyncSession):
     return result.scalars().all()
 
 async def create_location(db: AsyncSession, name: str, capacity: int = None):
-    """Persist a new location."""
+    """Persist a new location, refusing a name that is already taken."""
+    existing = await db.execute(select(Location).where(Location.name == name))
+    if existing.scalar_one_or_none():
+        raise DomainError("Location with this name already exists", status_code=409)
     location = Location(name=name, capacity=capacity)
     db.add(location)
     await db.commit()
