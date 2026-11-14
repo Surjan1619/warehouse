@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from app.models.Alchemy_models import User, Product, ProductType, Location
+from app.core.errors import DomainError, NotFoundError
 from app.core.security import hash_password
 
 async def get_user_by_username(db: AsyncSession, username: str):
@@ -23,6 +24,44 @@ async def get_user(db: AsyncSession, user_id: int):
     """Retrieve a single user by their primary key."""
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+async def get_all_users(db: AsyncSession):
+    """Fetch all users ordered by id."""
+    result = await db.execute(select(User).order_by(User.id))
+    return result.scalars().all()
+
+async def create_user_checked(db: AsyncSession, username: str, role: str, plain_password: str):
+    """Create a user, refusing a username that is already taken."""
+    if await get_user_by_username(db, username):
+        raise DomainError("User already exists", status_code=409)
+    return await create_user(db, username=username, role=role, plain_password=plain_password)
+
+async def update_user(db: AsyncSession, user_id: int, data: dict, acting_user_id: int):
+    """
+    Change password, role or active flag of a user.
+    An admin cannot deactivate or demote their own account, so the system
+    is never left without a way to manage users.
+    """
+    user = await get_user(db, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+
+    if user.id == acting_user_id:
+        if data.get("is_active") is False:
+            raise DomainError("You cannot deactivate your own account")
+        if data.get("role") not in (None, user.role):
+            raise DomainError("You cannot change your own role")
+
+    if data.get("password"):
+        user.password_hash = hash_password(data["password"])
+    if data.get("role") is not None:
+        user.role = data["role"]
+    if data.get("is_active") is not None:
+        user.is_active = data["is_active"]
+
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 # Product CRUD
 async def get_all_product_types(db: AsyncSession):

@@ -1,37 +1,72 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import './App.css';
+import { api, login, getToken, getUser, clearSession, isAdmin } from './api';
 
-// 1. Компонент защиты маршрутов
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
+const ROLE_LABELS = { admin: 'Администратор', worker: 'Работник склада' };
+
+// 1. Защита маршрутов: нужен вход, а для adminOnly — ещё и роль администратора.
+// Это только удобство интерфейса: права проверяет сервер.
+const ProtectedRoute = ({ children, adminOnly = false }) => {
+  if (!getToken()) return <Navigate to="/login" replace />;
+  if (adminOnly && !isAdmin(getUser())) return <Navigate to="/home" replace />;
+  return children;
 };
 
-// 2. Страница логина
+// Общая рамка страниц: шапка с именем пользователя и выходом
+const Layout = ({ title, children }) => {
+  const navigate = useNavigate();
+  const user = getUser();
+
+  const logout = () => {
+    clearSession();
+    navigate('/login');
+  };
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <Link to="/home" className="brand">WMS</Link>
+        <nav>
+          <Link to="/products">Товары</Link>
+          {isAdmin(user) && <Link to="/admin">Пользователи</Link>}
+        </nav>
+        <div className="topbar-user">
+          <span>
+            {user?.username} <span className="badge">{ROLE_LABELS[user?.role] || user?.role}</span>
+          </span>
+          <button className="btn btn-ghost" onClick={logout}>Выход</button>
+        </div>
+      </header>
+      <main className="content">
+        <h1>{title}</h1>
+        {children}
+      </main>
+    </div>
+  );
+};
+
+// 2. Страница входа
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+
+  if (getToken()) return <Navigate to="/home" replace />;
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const formData = new URLSearchParams();
-    formData.append('username', username);
-    formData.append('password', password);
-
-    const response = await fetch('http://localhost:8000/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData,
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      localStorage.setItem('token', data.access_token);
+    setError('');
+    setBusy(true);
+    try {
+      await login(username, password);
       navigate('/home');
-    } else {
-      alert('Ошибка входа');
+    } catch (err) {
+      setError(err.status === 400 ? 'Неверное имя или пароль' : err.message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -39,9 +74,25 @@ const LoginPage = () => {
     <div className="login-container">
       <form onSubmit={handleLogin} className="login-card">
         <h1>Вход</h1>
-        <input type="text" placeholder="Имя" onChange={(e) => setUsername(e.target.value)} required />
-        <input type="password" placeholder="Пароль" onChange={(e) => setPassword(e.target.value)} required />
-        <button type="submit">Войти</button>
+        <input
+          type="text"
+          placeholder="Имя"
+          autoComplete="username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+        <input
+          type="password"
+          placeholder="Пароль"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        {error && <p className="error" role="alert">{error}</p>}
+        <button type="submit" disabled={busy}>{busy ? 'Вход…' : 'Войти'}</button>
+        <p className="hint">Учётную запись создаёт администратор</p>
       </form>
     </div>
   );
@@ -49,58 +100,184 @@ const LoginPage = () => {
 
 // 3. Главная страница
 const HomePage = () => {
-  const navigate = useNavigate();
+  const user = getUser();
   return (
-    <div style={{padding: '20px'}}>
-      <h1>Главная WMS</h1>
-      <button onClick={() => navigate('/products')}>Просмотр товаров</button>
-      <button onClick={() => navigate('/admin')}>Управление (Admin)</button>
-      <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }}>Выход</button>
-    </div>
+    <Layout title="Главная">
+      <div className="tiles">
+        <Link to="/products" className="tile">
+          <h2>Товары</h2>
+          <p>Просмотр остатков на складе</p>
+        </Link>
+        {isAdmin(user) && (
+          <Link to="/admin" className="tile">
+            <h2>Пользователи</h2>
+            <p>Создание учётных записей работников</p>
+          </Link>
+        )}
+      </div>
+    </Layout>
   );
 };
 
 // 4. Страница просмотра товаров
 const ProductsPage = () => {
   const [products, setProducts] = useState([]);
-  
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    fetch('http://localhost:8000/products/', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    })
-    .then(res => res.json())
-    .then(setProducts);
+    api('/products/').then(setProducts).catch((err) => setError(err.message));
   }, []);
 
   return (
-    <div style={{padding: '20px'}}>
-      <h1>Список товаров</h1>
-      <ul>
-        {products.map(p => <li key={p.id}>{p.name} - {p.quantity} шт.</li>)}
-      </ul>
-    </div>
+    <Layout title="Список товаров">
+      {error && <p className="error" role="alert">{error}</p>}
+      {products.length === 0 && !error ? (
+        <p className="muted">Товаров пока нет</p>
+      ) : (
+        <ul className="list">
+          {products.map((p) => (
+            <li key={p.id}>{p.name} — {p.quantity} шт.</li>
+          ))}
+        </ul>
+      )}
+    </Layout>
   );
 };
 
-// 5. Админка (Управление товарами и типами)
+// 5. Панель администратора: пользователи
+const emptyForm = { username: '', password: '', role: 'worker' };
+
 const AdminPage = () => {
-  const [products, setProducts] = useState([]);
-  const [types, setTypes] = useState([]);
-  
+  const me = getUser();
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const loadUsers = async () => setUsers(await api('/users/'));
+
   useEffect(() => {
-    // Загрузка товаров и типов
-    Promise.all([
-      fetch('http://localhost:8000/products/', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(r => r.json()),
-      fetch('http://localhost:8000/products/types', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(r => r.json())
-    ]).then(([p, t]) => { setProducts(p); setTypes(t); });
+    api('/users/').then(setUsers).catch((err) => setError(err.message));
   }, []);
 
+  const run = async (action, successText) => {
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      await action();
+      setNotice(successText);
+      await loadUsers();
+      return true;
+    } catch (err) {
+      setError(err.status === 409 ? 'Пользователь с таким именем уже есть' : err.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createUser = async (e) => {
+    e.preventDefault();
+    const ok = await run(
+      () => api('/users/', { method: 'POST', body: form }),
+      `Пользователь «${form.username}» создан`,
+    );
+    if (ok) setForm(emptyForm);
+  };
+
+  const setActive = (user, isActive) =>
+    run(
+      () => api(`/users/${user.id}`, { method: 'PATCH', body: { is_active: isActive } }),
+      isActive ? `«${user.username}» снова может входить` : `«${user.username}» отключён`,
+    );
+
+  const resetPassword = (user) => {
+    const password = window.prompt(`Новый пароль для «${user.username}» (не короче 6 символов)`);
+    if (!password) return;
+    run(
+      () => api(`/users/${user.id}`, { method: 'PATCH', body: { password } }),
+      `Пароль «${user.username}» изменён`,
+    );
+  };
+
   return (
-    <div style={{padding: '20px'}}>
-      <h1>Управление товарами и типами</h1>
-      {/* Здесь формы добавления/удаления (из предыдущего кода) */}
-      <p>Формы управления будут здесь...</p>
-    </div>
+    <Layout title="Пользователи">
+      <section className="card">
+        <h2>Новый пользователь</h2>
+        <form className="form-row" onSubmit={createUser}>
+          <label>
+            Имя
+            <input
+              type="text"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              minLength={3}
+              maxLength={50}
+              autoComplete="off"
+              required
+            />
+          </label>
+          <label>
+            Пароль
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              minLength={6}
+              autoComplete="new-password"
+              required
+            />
+          </label>
+          <label>
+            Роль
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              <option value="worker">{ROLE_LABELS.worker}</option>
+              <option value="admin">{ROLE_LABELS.admin}</option>
+            </select>
+          </label>
+          <button className="btn" type="submit" disabled={busy}>Создать</button>
+        </form>
+        {error && <p className="error" role="alert">{error}</p>}
+        {notice && <p className="notice" role="status">{notice}</p>}
+      </section>
+
+      <section className="card">
+        <h2>Все пользователи</h2>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Роль</th>
+                <th>Состояние</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className={u.is_active ? '' : 'inactive'}>
+                  <td>{u.username}{u.id === me?.id && <span className="muted"> (вы)</span>}</td>
+                  <td>{ROLE_LABELS[u.role] || u.role}</td>
+                  <td>{u.is_active ? 'Активен' : 'Отключён'}</td>
+                  <td className="actions">
+                    <button className="btn btn-ghost" disabled={busy} onClick={() => resetPassword(u)}>
+                      Сменить пароль
+                    </button>
+                    {u.id !== me?.id && (
+                      <button className="btn btn-ghost" disabled={busy} onClick={() => setActive(u, !u.is_active)}>
+                        {u.is_active ? 'Отключить' : 'Включить'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </Layout>
   );
 };
 
@@ -111,8 +288,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-        <Route path="/" element={<Navigate to="/home" />} />
+        <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </Router>
   );

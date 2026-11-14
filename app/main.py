@@ -3,8 +3,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.api.routers import auth, cuts, locations, materials, orders, products, stock_items
+from app.api.routers import auth, cuts, locations, materials, orders, products, stock_items, users
 from app.core.errors import DomainError
+from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.middleware.auth import AuthMiddleware
 
@@ -25,15 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers with the application
-# Prefix "/auth" handles all authentication-related endpoints
+# Register routers with the application.
+# AuthMiddleware only checks the token signature. The get_current_user
+# dependency also loads the user, so a deactivated or deleted account is
+# rejected immediately instead of when its token expires.
+authenticated = [Depends(get_current_user)]
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(products.router, prefix="/products", tags=["products"])
-app.include_router(locations.router, prefix="/locations", tags=["locations"])
-app.include_router(materials.router, prefix="/materials", tags=["materials"])
-app.include_router(orders.router, prefix="/orders", tags=["orders"])
-app.include_router(stock_items.router, prefix="/stock-items", tags=["stock items"])
-app.include_router(cuts.router, prefix="/cuts", tags=["cuts"])
+app.include_router(users.router, prefix="/users", tags=["users"])  # admin only
+app.include_router(products.router, prefix="/products", tags=["products"], dependencies=authenticated)
+app.include_router(locations.router, prefix="/locations", tags=["locations"], dependencies=authenticated)
+app.include_router(materials.router, prefix="/materials", tags=["materials"], dependencies=authenticated)
+app.include_router(orders.router, prefix="/orders", tags=["orders"], dependencies=authenticated)
+app.include_router(stock_items.router, prefix="/stock-items", tags=["stock items"], dependencies=authenticated)
+app.include_router(cuts.router, prefix="/cuts", tags=["cuts"], dependencies=authenticated)
 
 
 @app.exception_handler(DomainError)

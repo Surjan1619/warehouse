@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import CheckConstraint, String, Integer, Float, ForeignKey, DateTime, func
+from sqlalchemy import Boolean, CheckConstraint, String, true, Integer, Float, ForeignKey, DateTime, func
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
@@ -13,7 +13,10 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # "admin" or "worker"
     role: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Deactivated users cannot log in; they are kept because history refers to them
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship

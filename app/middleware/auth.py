@@ -21,7 +21,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Allow public endpoints
-        if request.url.path in ["/auth/login", "/auth/register", "/docs", "/openapi.json", "/", "/favicon.svg"]:
+        if request.url.path in ["/auth/login", "/docs", "/openapi.json", "/", "/favicon.svg"]:
             return await call_next(request)
 
         # Check for Authorization header

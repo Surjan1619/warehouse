@@ -40,7 +40,8 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `id` | integer | PK |
 | `username` | varchar(50) | уникальный, индекс |
 | `password_hash` | varchar(255) | passlib `sha256_crypt` |
-| `role` | varchar(50) | произвольная строка, в коде не проверяется |
+| `role` | varchar(50) | `admin` или `worker` |
+| `is_active` | boolean | по умолчанию `true`; отключённый пользователь не может войти |
 
 ### `product_types`
 
@@ -150,8 +151,9 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `0e2250094d67` | `product_types.required_attributes` (JSONB) |
 | `79c14ac440ea` | Таблица `locations` и `products.location_id` |
 | `a1c3f5e7b902` | Поштучный учёт: `materials`, `orders`, `stock_items`, `cut_operations` |
+| `b2d4a6c8e013` | `users.is_active` |
 
-Две последние ревизии пока не добавлены в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
+Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 
 ```bash
 alembic upgrade head

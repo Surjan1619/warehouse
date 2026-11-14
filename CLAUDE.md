@@ -48,9 +48,9 @@ app/
   main.py                  # FastAPI-приложение, CORS, подключение роутеров
   core/                    # config (pydantic-settings), db (async engine), jwt, security
   middleware/auth.py       # проверка Bearer-токена на всех путях, кроме публичных
-  api/deps.py              # get_current_user (сейчас не используется роутерами)
+  api/deps.py              # get_current_user (подключён ко всем роутерам), require_admin
   core/errors.py           # DomainError, NotFoundError — ошибки бизнес-правил
-  api/routers/             # auth, products, locations, materials, orders, stock_items, cuts
+  api/routers/             # auth, users, products, locations, materials, orders, stock_items, cuts
   repo/crud.py             # запросы к БД: users, products, product_types, locations
   repo/stock.py            # материалы, заказы, заготовки (поштучный учёт)
   repo/cutting.py          # резка заготовки: plan_cut, cut_item
@@ -59,7 +59,8 @@ app/
   schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory
 alembic/versions/          # миграции
 scripts/create_admin.py
-frontend/src/App.jsx       # всё приложение в одном файле: роуты и страницы
+frontend/src/App.jsx       # роуты и все страницы
+frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
 ```
 
 ## Правила работы с кодом
@@ -72,9 +73,11 @@ frontend/src/App.jsx       # всё приложение в одном файл�
 - **Только async.** Сессия — `AsyncSession` через `Depends(get_db)`; запросы в стиле SQLAlchemy 2.0 (`select(...)`, `await db.execute(...)`).
 - **Связи загружать явно.** В async-режиме ленивая загрузка падает. Если схема ответа содержит вложенные объекты (`ProductRead.product_type`, `.location`), в запросе нужен `joinedload`, как в `get_all_products`.
 - **Изменение моделей = миграция.** После правки `Alchemy_models.py` создать ревизию через `alembic revision --autogenerate` и просмотреть её вручную. Для внешних ключей задавать имя ограничения явно: в ревизии `79c14ac440ea` стоит `None`, из-за чего её `downgrade` не сработает.
-- **Новый роутер** нужно подключить в `app/main.py` через `include_router`. Если эндпоинт должен быть доступен без токена, добавить путь в список в `app/middleware/auth.py`.
+- **Новый роутер** нужно подключить в `app/main.py` через `include_router` с `dependencies=authenticated`, иначе он примет токен отключённого пользователя. Если эндпоинт должен быть доступен без токена, добавить путь в список в `app/middleware/auth.py`.
+- **Права.** Роли — `admin` и `worker`. Для действий только администратора использовать `Depends(require_admin)`. Скрытие кнопок во фронтенде защитой не считается.
+- **Пользователей не удалять**, а отключать через `is_active`: на них ссылается `cut_operations.user_id`.
 - **БД — только PostgreSQL**: используется `JSONB` и драйвер `asyncpg`.
-- **Фронтенд.** Адрес API `http://localhost:8000` прописан прямо в `fetch`-вызовах, токен хранится в `localStorage` под ключом `token`. CORS на бэкенде разрешает только `http://localhost:5173`.
+- **Фронтенд.** Запросы делать через `api()` из `frontend/src/api.js`, а не через `fetch` напрямую: она добавляет токен и обрабатывает 401. Адрес API задаётся в `VITE_API_URL` (по умолчанию `http://localhost:8000`). CORS на бэкенде разрешает только `http://localhost:5173`.
 - **Секреты.** `.env` в git не попадает. Значения из него не выводить и не коммитить.
 
 ## Что нужно знать заранее
@@ -85,4 +88,5 @@ frontend/src/App.jsx       # всё приложение в одном файл�
 - PostgreSQL на машине разработчика не установлен, база работает только в Docker (`docker compose up -d db`).
 - Фронтенд пока не знает о материалах, заказах, заготовках и резке: для них есть только API.
 - `AuthMiddleware` должен добавляться в `main.py` раньше `CORSMiddleware` и возвращать `JSONResponse`, а не бросать `HTTPException`: исключение из middleware превращается в 500.
-- Роли (`User.role`) нигде не проверяются; `/auth/register` открыт и принимает любую роль.
+- Открытой регистрации нет: первого администратора создаёт `scripts/create_admin.py`, остальных — администратор.
+- Работник (`worker`) пока может всё, кроме управления пользователями.
