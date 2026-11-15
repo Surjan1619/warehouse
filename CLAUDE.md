@@ -65,13 +65,14 @@ app/
   repo/crud.py             # запросы к БД: users, products, product_types, locations
   repo/stock.py            # материалы, заказы, заготовки (поштучный учёт)
   repo/cutting.py          # резка заготовки: plan_cut, cut_item
+  repo/activity.py         # журнал действий: add_event (без commit), list_events
   repo/inventory.py        # sell_product для штучных товаров (без HTTP-эндпоинта)
   models/Alchemy_models.py # все ORM-модели и Base
   schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory
 alembic/versions/          # миграции
 scripts/create_admin.py
 tests/conftest.py          # фикстуры: тестовая база, client, admin, worker, material, receive
-tests/test_*.py            # тесты API: резка и подбор, заготовки, вход и права
+tests/test_*.py            # тесты: резка и подбор, заготовки, вход и права, журнал
 frontend/src/App.jsx       # маршруты, вход, главная, пользователи
 frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
 frontend/src/hooks.js      # useList, useAction — общая логика страниц
@@ -87,6 +88,7 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage
 - **Потери на рез по умолчанию не учитываются** (`kerf_mm = 0`, решение владельца от 15.11.2026): 7000 мм на 3000 + 3000 дают остаток ровно 1000. Учёт включается для отдельного материала полем «Ширина реза» в справочнике; логика `plan_cut` для ненулевого реза сохранена.
 - **Инвариант резки:** длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`. Любое изменение `app/repo/cutting.py` должно его сохранять. Фронтенд раскрой не считает: предпросмотр приходит от `POST /cuts/suggest`.
 - **Подбор заготовки** (`suggest_sources`) ранжирует по правилу best fit: меньше остаток — выше. Это решение владельца от 15.11.2026 («сначала самые экономные»). Подбор ищет одну заготовку под все куски, раскладки по нескольким нет.
+- **Журнал действий.** Запись в `activity_log` добавлять через `activity.add_event` в той же транзакции, что и само действие, до его `commit`. Отдельный commit для журнала не делать: запись должна откатываться вместе с действием.
 - **Ошибки в `repo`.** Бросать `DomainError` / `NotFoundError` из `app/core/errors.py`, а не `HTTPException`; обработчик в `main.py` превращает их в ответ.
 - **Перечитывание после commit.** У сессии `expire_on_commit=False`, поэтому объект, уже лежащий в сессии, хранит старые значения связей. Запрос, который должен вернуть свежие связи, выполнять с `.execution_options(populate_existing=True)`, как в `stock.get_item`.
 - **Только async.** Сессия — `AsyncSession` через `Depends(get_db)`; запросы в стиле SQLAlchemy 2.0 (`select(...)`, `await db.execute(...)`).

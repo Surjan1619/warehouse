@@ -187,3 +187,40 @@ class CutOperation(Base):
     results: Mapped[list["StockItem"]] = relationship(
         back_populates="cut_operation", foreign_keys="StockItem.cut_operation_id", order_by="StockItem.id"
     )
+
+
+class ActivityEvent(Base):
+    """
+    One entry of the activity journal: who did what, with what, and when.
+
+    The journal is append-only. `quantity` and `length_mm` hold the totals the
+    event accounts for, so reports are sums over this table.
+    """
+    __tablename__ = "activity_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", name="fk_activity_log_user_id"), nullable=True, index=True
+    )
+    # One of the names in app/repo/activity.py: "receive", "cut", "use", "scrap", ...
+    action: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    material_id: Mapped[int | None] = mapped_column(
+        ForeignKey("materials.id", name="fk_activity_log_material_id"), nullable=True, index=True
+    )
+    # The piece the event is about, when it concerns a single one
+    stock_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("stock_items.id", name="fk_activity_log_stock_item_id"), nullable=True, index=True
+    )
+    cut_operation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cut_operations.id", name="fk_activity_log_cut_operation_id"), nullable=True
+    )
+    # Number of pieces and their total length in millimetres
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    length_mm: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Anything else worth keeping, e.g. the old and the new value of an edit
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    user: Mapped["User | None"] = relationship()
+    material: Mapped["Material | None"] = relationship()
+    stock_item: Mapped["StockItem | None"] = relationship()

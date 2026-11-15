@@ -137,6 +137,25 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `note` | varchar(500) | nullable |
 | `created_at` | timestamp | `now()` |
 
+### `activity_log`
+
+Журнал действий. Только дополняется: записи не меняются и не удаляются.
+
+| Колонка | Тип | Примечание |
+|---|---|---|
+| `id` | integer | PK |
+| `created_at` | timestamp | `now()`, индекс |
+| `user_id` | integer | FK → `users.id`, nullable; кто сделал |
+| `action` | varchar(30) | `receive` (приход), `cut` (резка), `use` (израсходовано), `scrap` (отходы) |
+| `material_id` | integer | FK → `materials.id`, nullable |
+| `stock_item_id` | integer | FK → `stock_items.id`, nullable; заготовка, если действие касается одной |
+| `cut_operation_id` | integer | FK → `cut_operations.id`, nullable |
+| `quantity` | integer | сколько штук, по умолчанию 1 |
+| `length_mm` | integer | их суммарная длина, по умолчанию 0 |
+| `details` | JSONB | nullable; дополнительные сведения |
+
+Отчёты строятся как суммы `quantity` и `length_mm` по этой таблице. На 15.11.2026 таблица есть, но в неё ещё ничего не пишется (шаг 1.3 плана).
+
 Для любой резки выполняется равенство: длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`.
 
 `stock_items` и `cut_operations` ссылаются друг на друга, поэтому внешний ключ `stock_items.cut_operation_id` создаётся в миграции отдельной командой после обеих таблиц, а в модели помечен `use_alter=True`.
@@ -155,6 +174,7 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `b2d4a6c8e013` | `users.is_active` |
 | `c3e5b7d9f124` | Ширина реза по умолчанию 0; у существующих материалов сброшена в 0 |
 | `d4f6c8e0a235` | `stock_items.created_by_id`; кускам от прежних резок автор проставлен по автору резки |
+| `e5a7d9f1b346` | Таблица `activity_log` |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 
