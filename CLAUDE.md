@@ -61,7 +61,7 @@ app/
   middleware/auth.py       # проверка Bearer-токена на всех путях, кроме публичных
   api/deps.py              # get_current_user (подключён ко всем роутерам), require_admin
   core/errors.py           # DomainError, NotFoundError — ошибки бизнес-правил
-  api/routers/             # auth, users, products, locations, materials, orders, stock_items, cuts
+  api/routers/             # auth, users, activity, products, locations, materials, orders, stock_items, cuts
   repo/crud.py             # запросы к БД: users, products, product_types, locations
   repo/stock.py            # материалы, заказы, заготовки (поштучный учёт)
   repo/cutting.py          # резка заготовки: plan_cut, cut_item
@@ -78,7 +78,7 @@ frontend/src/api.js        # вызовы API, сессия (токен и по�
 frontend/src/hooks.js      # useList, useAction — общая логика страниц
 frontend/src/labels.js     # русские названия ролей и статусов
 frontend/src/components/   # Layout (шапка), Messages (ошибка / успех)
-frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage
+frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, JournalPage
 ```
 
 ## Правила работы с кодом
@@ -89,6 +89,7 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage
 - **Инвариант резки:** длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`. Любое изменение `app/repo/cutting.py` должно его сохранять. Фронтенд раскрой не считает: предпросмотр приходит от `POST /cuts/suggest`.
 - **Подбор заготовки** (`suggest_sources`) ранжирует по правилу best fit: меньше остаток — выше. Это решение владельца от 15.11.2026 («сначала самые экономные»). Подбор ищет одну заготовку под все куски, раскладки по нескольким нет.
 - **Журнал действий.** Запись в `activity_log` добавлять через `activity.add_event` в той же транзакции, что и само действие, до его `commit`.  Отдельный commit для журнала не делать: запись должна откатываться вместе с действием. Новое действие — новая константа в `repo/activity.py` и строка в таблице в `docs/DATABASE.md`. Удаления в журнал не пишутся (решение владельца от 15.11.2026).
+- **Время.** В базе время хранится в UTC без смещения, владелец работает в поясе UTC+4. Схема, отдающая время на сайт, должна добавлять `+00:00` (как `ActivityEventRead`), а фильтры по датам — приводиться к UTC (`_to_db_time` в `routers/activity.py`). Иначе страница покажет время со сдвигом на 4 часа.
 - **Ошибки в `repo`.** Бросать `DomainError` / `NotFoundError` из `app/core/errors.py`, а не `HTTPException`; обработчик в `main.py` превращает их в ответ.
 - **Перечитывание после commit.** У сессии `expire_on_commit=False`, поэтому объект, уже лежащий в сессии, хранит старые значения связей. Запрос, который должен вернуть свежие связи, выполнять с `.execution_options(populate_existing=True)`, как в `stock.get_item`.
 - **Только async.** Сессия — `AsyncSession` через `Depends(get_db)`; запросы в стиле SQLAlchemy 2.0 (`select(...)`, `await db.execute(...)`).

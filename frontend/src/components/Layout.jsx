@@ -21,6 +21,7 @@ export const Layout = ({ title, children }) => {
           <Link to="/cut">Резка</Link>
           <Link to="/products">Товары</Link>
           <Link to="/catalog">Справочники</Link>
+          {isAdmin(user) && <Link to="/journal">Журнал</Link>}
           {isAdmin(user) && <Link to="/admin">Пользователи</Link>}
         </nav>
         <div className="topbar-user">

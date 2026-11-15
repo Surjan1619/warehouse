@@ -61,6 +61,47 @@ Authorization: Bearer <access_token>
 
 Пароль в ответах не возвращается.
 
+## Журнал действий — `/activity` (только администратор)
+
+### GET `/activity/`
+
+Записи журнала от новых к старым. Остальным ролям возвращается 403.
+
+| Параметр | Тип | Примечание |
+|---|---|---|
+| `user_id` | целое | кто сделал |
+| `action` | строка | `receive`, `cut`, `use`, `scrap` |
+| `material_id` | целое | |
+| `stock_item_id` | целое | записи об одной заготовке |
+| `date_from` | дата-время | включительно; передавать со смещением, например `2026-11-10T00:00:00+04:00` |
+| `date_to` | дата-время | не включая |
+| `limit` | целое | 1–200, по умолчанию 50 |
+| `offset` | целое | по умолчанию 0 |
+
+```json
+{
+  "total": 37,
+  "items": [
+    {
+      "id": 12,
+      "created_at": "2026-11-15T07:47:50.890093+00:00",
+      "action": "cut",
+      "user": {"id": 1, "username": "admin"},
+      "material": {"id": 1, "name": "rollet"},
+      "stock_item": {"id": 33, "code": "T-000033", "length_mm": 1000},
+      "cut_operation_id": 9,
+      "quantity": 1,
+      "length_mm": 1000,
+      "details": {"pieces_mm": [100], "remainder_mm": 900}
+    }
+  ]
+}
+```
+
+- `total` — сколько записей подходит под фильтры без учёта `limit` и `offset`.
+- `created_at` всегда в UTC и с явным смещением: браузер сам переводит его в местное время.
+- Что означают `quantity`, `length_mm` и `details` для каждого действия, описано в [DATABASE.md](DATABASE.md).
+
 ## Товары — `/products`
 
 ### GET `/products/`

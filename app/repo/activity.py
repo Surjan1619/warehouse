@@ -7,7 +7,7 @@ together and the journal never disagrees with the data.
 """
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -68,6 +68,31 @@ def add_event(
     return event
 
 
+def _filtered(
+    query,
+    user_id: int | None,
+    action: str | None,
+    material_id: int | None,
+    stock_item_id: int | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
+):
+    """Apply the journal filters. `date_from` is inclusive and `date_to` exclusive."""
+    if user_id is not None:
+        query = query.where(ActivityEvent.user_id == user_id)
+    if action is not None:
+        query = query.where(ActivityEvent.action == action)
+    if material_id is not None:
+        query = query.where(ActivityEvent.material_id == material_id)
+    if stock_item_id is not None:
+        query = query.where(ActivityEvent.stock_item_id == stock_item_id)
+    if date_from is not None:
+        query = query.where(ActivityEvent.created_at >= date_from)
+    if date_to is not None:
+        query = query.where(ActivityEvent.created_at < date_to)
+    return query
+
+
 async def list_events(
     db: AsyncSession,
     *,
@@ -91,18 +116,22 @@ async def list_events(
         .limit(limit)
         .offset(offset)
     )
-    if user_id is not None:
-        query = query.where(ActivityEvent.user_id == user_id)
-    if action is not None:
-        query = query.where(ActivityEvent.action == action)
-    if material_id is not None:
-        query = query.where(ActivityEvent.material_id == material_id)
-    if stock_item_id is not None:
-        query = query.where(ActivityEvent.stock_item_id == stock_item_id)
-    if date_from is not None:
-        query = query.where(ActivityEvent.created_at >= date_from)
-    if date_to is not None:
-        query = query.where(ActivityEvent.created_at < date_to)
-
+    query = _filtered(query, user_id, action, material_id, stock_item_id, date_from, date_to)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def count_events(
+    db: AsyncSession,
+    *,
+    user_id: int | None = None,
+    action: str | None = None,
+    material_id: int | None = None,
+    stock_item_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> int:
+    """Count the journal entries that match the same filters as list_events."""
+    query = select(func.count()).select_from(ActivityEvent)
+    query = _filtered(query, user_id, action, material_id, stock_item_id, date_from, date_to)
+    return await db.scalar(query)

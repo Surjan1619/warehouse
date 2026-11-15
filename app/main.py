@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.api.routers import auth, cuts, locations, materials, orders, products, stock_items, users
+from app.api.routers import activity, auth, cuts, locations, materials, orders, products, stock_items, users
 from app.core.errors import DomainError
 from app.api.deps import get_current_user
 from app.core.db import get_db
@@ -34,6 +34,7 @@ authenticated = [Depends(get_current_user)]
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])  # admin only
+app.include_router(activity.router, prefix="/activity", tags=["activity"])  # admin only
 app.include_router(products.router, prefix="/products", tags=["products"], dependencies=authenticated)
 app.include_router(locations.router, prefix="/locations", tags=["locations"], dependencies=authenticated)
 app.include_router(materials.router, prefix="/materials", tags=["materials"], dependencies=authenticated)

@@ -8,6 +8,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { StockPage } from './pages/StockPage';
 import { CutPage } from './pages/CutPage';
 import { CatalogPage } from './pages/CatalogPage';
+import { JournalPage } from './pages/JournalPage';
 
 // 1. Защита маршрутов: нужен вход, а для adminOnly — ещё и роль администратора.
 // Это только удобство интерфейса: права проверяет сервер.
@@ -91,6 +92,12 @@ const HomePage = () => {
           <h2>Справочники</h2>
           <p>Материалы, типы товаров, места хранения</p>
         </Link>
+        {isAdmin(user) && (
+          <Link to="/journal" className="tile">
+            <h2>Журнал</h2>
+            <p>Кто, что и когда делал на складе</p>
+          </Link>
+        )}
         {isAdmin(user) && (
           <Link to="/admin" className="tile">
             <h2>Пользователи</h2>
@@ -249,6 +256,7 @@ function App() {
         <Route path="/cut" element={<ProtectedRoute><CutPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
+        <Route path="/journal" element={<ProtectedRoute adminOnly><JournalPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

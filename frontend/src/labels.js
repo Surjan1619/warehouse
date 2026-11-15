@@ -9,3 +9,11 @@ export const STATUS_LABELS = {
   cut: 'Разрезана',
   scrap: 'Отходы',
 };
+
+// Actions recorded in the activity journal
+export const ACTION_LABELS = {
+  receive: 'Приход',
+  cut: 'Резка',
+  use: 'Израсходовано',
+  scrap: 'Отходы',
+};

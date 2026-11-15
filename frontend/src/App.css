@@ -425,6 +425,35 @@ details.more summary {
   color: #999;
 }
 
+.action-receive {
+  color: #8fd19e;
+  border-color: rgba(143, 209, 158, 0.4);
+}
+
+.action-cut {
+  color: #9ecbff;
+  border-color: rgba(158, 203, 255, 0.4);
+}
+
+.action-use {
+  color: #f0c674;
+  border-color: rgba(240, 198, 116, 0.4);
+}
+
+.action-scrap {
+  color: #ff8080;
+  border-color: rgba(255, 128, 128, 0.4);
+}
+
+.table td.wrap {
+  white-space: normal;
+  min-width: 220px;
+}
+
+.form-row input[type='date'] {
+  color-scheme: dark;
+}
+
 .card .table-wrap {
   margin-top: 1rem;
 }
