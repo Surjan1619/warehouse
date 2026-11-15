@@ -5,9 +5,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.repo import cutting
-from app.schemas.stock import CutRead, CutRequest
+from app.schemas.stock import CutRead, CutRequest, CutSuggestRequest, CutSuggestResponse
 
 router = APIRouter()
+
+
+@router.post("/suggest", response_model=CutSuggestResponse)
+async def suggest(suggest_in: CutSuggestRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Suggest which stock items the given pieces can be cut from.
+    The most economical option (smallest remainder) comes first. Nothing is changed.
+    """
+    return await cutting.suggest_sources(
+        db,
+        material_id=suggest_in.material_id,
+        piece_lengths_mm=suggest_in.pieces,
+        kerf_mm=suggest_in.kerf_mm,
+    )
 
 
 @router.post("/", response_model=CutRead, status_code=201)

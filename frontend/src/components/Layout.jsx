@@ -18,6 +18,7 @@ export const Layout = ({ title, children }) => {
         <Link to="/home" className="brand">WMS</Link>
         <nav>
           <Link to="/stock">Заготовки</Link>
+          <Link to="/cut">Резка</Link>
           <Link to="/products">Товары</Link>
           <Link to="/catalog">Справочники</Link>
           {isAdmin(user) && <Link to="/admin">Пользователи</Link>}

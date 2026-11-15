@@ -92,7 +92,7 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `kind` | varchar(50) | nullable; вид материала |
 | `sku` | varchar(50) | nullable, уникальный |
 | `color` | varchar(50) | nullable |
-| `kerf_mm` | integer | ширина реза, по умолчанию 3 |
+| `kerf_mm` | integer | ширина реза, по умолчанию 0 (потери на рез не учитываются) |
 | `min_usable_length_mm` | integer | порог отходов, по умолчанию 300 |
 
 ### `orders`
@@ -152,6 +152,7 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `79c14ac440ea` | Таблица `locations` и `products.location_id` |
 | `a1c3f5e7b902` | Поштучный учёт: `materials`, `orders`, `stock_items`, `cut_operations` |
 | `b2d4a6c8e013` | `users.is_active` |
+| `c3e5b7d9f124` | Ширина реза по умолчанию 0; у существующих материалов сброшена в 0 |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 

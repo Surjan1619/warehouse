@@ -6,6 +6,7 @@ import { Layout } from './components/Layout';
 import { ROLE_LABELS } from './labels';
 import { ProductsPage } from './pages/ProductsPage';
 import { StockPage } from './pages/StockPage';
+import { CutPage } from './pages/CutPage';
 import { CatalogPage } from './pages/CatalogPage';
 
 // 1. Защита маршрутов: нужен вход, а для adminOnly — ещё и роль администратора.
@@ -77,6 +78,10 @@ const HomePage = () => {
         <Link to="/stock" className="tile">
           <h2>Заготовки</h2>
           <p>Приход труб и профилей, остатки по длинам</p>
+        </Link>
+        <Link to="/cut" className="tile">
+          <h2>Резка</h2>
+          <p>Разрезать заготовку, записать куски и остаток</p>
         </Link>
         <Link to="/products" className="tile">
           <h2>Товары</h2>
@@ -241,6 +246,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/stock" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
+        <Route path="/cut" element={<ProtectedRoute><CutPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />

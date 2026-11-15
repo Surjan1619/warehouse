@@ -130,6 +130,7 @@ export const StockPage = () => {
                     <th>Место</th>
                     <th>Заказ</th>
                     <th>Примечание</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -142,6 +143,11 @@ export const StockPage = () => {
                       <td>{item.location?.name || '—'}</td>
                       <td>{item.order?.number || '—'}</td>
                       <td className="muted">{item.note || ''}</td>
+                      <td className="actions">
+                        {item.status === 'in_stock' && (
+                          <Link className="btn btn-ghost" to={`/cut?item=${item.id}&material=${item.material.id}`}>Резать</Link>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

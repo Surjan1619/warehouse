@@ -244,6 +244,68 @@
   flex: 2 1 260px;
 }
 
+.section-title {
+  margin-top: 1.5rem !important;
+}
+
+.piece-row {
+  margin-bottom: 0.8rem;
+}
+
+.piece-row label {
+  flex: 0 1 200px;
+}
+
+.multiply {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #aaa;
+}
+
+.form-row .multiply input {
+  width: 4.5rem;
+}
+
+.multiply .btn,
+.piece-row > .btn {
+  height: 2.75rem;
+}
+
+.table tbody tr[class] {
+  cursor: pointer;
+}
+
+.table tr.selected td {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.table .best {
+  margin-left: 0.6rem;
+}
+
+.table .warn {
+  color: #f0c674;
+}
+
+.cut-summary {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1.2rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+.cut-summary .error {
+  margin-top: 0;
+}
+
+a.btn-ghost {
+  text-decoration: none;
+}
+
 .form-submit {
   margin-top: 1rem;
 }

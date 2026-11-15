@@ -87,8 +87,8 @@ class Material(Base):
     kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sku: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
     color: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    # Width of material lost per cut, in millimetres
-    kerf_mm: Mapped[int] = mapped_column(Integer, nullable=False, server_default="3")
+    # Width of material lost per cut, in millimetres; 0 means cuts are not accounted for
+    kerf_mm: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     # Remainders shorter than this are written off as scrap
     min_usable_length_mm: Mapped[int] = mapped_column(Integer, nullable=False, server_default="300")
 
@@ -180,5 +180,5 @@ class CutOperation(Base):
     source_item: Mapped["StockItem"] = relationship(foreign_keys=[source_item_id])
     user: Mapped["User | None"] = relationship()
     results: Mapped[list["StockItem"]] = relationship(
-        back_populates="cut_operation", foreign_keys="StockItem.cut_operation_id"
+        back_populates="cut_operation", foreign_keys="StockItem.cut_operation_id", order_by="StockItem.id"
     )

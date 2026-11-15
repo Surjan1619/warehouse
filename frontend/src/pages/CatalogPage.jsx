@@ -5,7 +5,7 @@ import { Messages } from '../components/Messages';
 import { useAction, useList, numberOrNull, textOrNull } from '../hooks';
 
 // --- Материалы: то, что режется (профили, направляющие, валы) ---
-const emptyMaterial = { name: '', kind: '', sku: '', color: '', kerf_mm: '3', min_usable_length_mm: '300' };
+const emptyMaterial = { name: '', kind: '', sku: '', color: '', kerf_mm: '0', min_usable_length_mm: '300' };
 
 const MaterialsCard = () => {
   const [materials, reload, loadError] = useList('/materials/');

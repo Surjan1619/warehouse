@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,7 +15,7 @@ class MaterialBase(BaseModel):
     kind: str | None = Field(None, max_length=50)
     sku: str | None = Field(None, max_length=50)
     color: str | None = Field(None, max_length=50)
-    kerf_mm: int = Field(3, ge=0, le=100)
+    kerf_mm: int = Field(0, ge=0, le=100)
     min_usable_length_mm: int = Field(300, ge=0)
 
 
@@ -123,8 +123,10 @@ class OrderDetail(OrderRead):
 # --- Cutting ---
 class CutPiece(BaseModel):
     length_mm: int = Field(..., gt=0)
-    # Reserve the piece for an order; when omitted it goes back to stock
+    # Link the piece to an order; without `used` it is reserved for that order
     order_id: int | None = None
+    # The piece is consumed right away instead of going back to stock
+    used: bool = False
     # Defaults to the location of the source piece
     location_id: int | None = None
     note: str | None = Field(None, max_length=500)
@@ -151,3 +153,34 @@ class CutRead(BaseModel):
     # Requested pieces plus the remainder, if any
     results: list[StockItemRead]
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Choosing what to cut from ---
+class CutSuggestRequest(BaseModel):
+    material_id: int
+    # Lengths of the pieces that are needed, in millimetres
+    pieces: list[Annotated[int, Field(gt=0)]] = Field(..., min_length=1, max_length=100)
+    # Defaults to the kerf of the material
+    kerf_mm: int | None = Field(None, ge=0, le=100)
+
+
+class CutCandidate(BaseModel):
+    """Interchangeable stock items (same length and location) the pieces can be cut from."""
+    # The piece to take: the oldest of the group
+    item: StockItemRead
+    # Every item of the group, oldest first
+    item_ids: list[int]
+    count: int
+    remainder_mm: int
+    kerf_loss_mm: int
+    # "none": the piece is used up; "stock": the remainder is kept; "scrap": it is too short to keep
+    remainder_fate: Literal["none", "stock", "scrap"]
+
+
+class CutSuggestResponse(BaseModel):
+    # Length the pieces take together with the cuts between them
+    required_mm: int
+    # Most economical first: the smaller the remainder, the higher
+    candidates: list[CutCandidate]
+    # Longest free piece of this material, to explain an empty list
+    longest_available_mm: int | None = None
