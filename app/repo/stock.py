@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.errors import DomainError, NotFoundError
 from app.models.Alchemy_models import Location, Material, Order, StockItem
+from app.repo import activity
 
 # Relationships needed by StockItemRead; lazy loading does not work in async mode
 ITEM_LOAD = (
@@ -94,7 +95,7 @@ async def create_order(db: AsyncSession, data: dict) -> Order:
     return order
 
 
-async def update_order(db: AsyncSession, order_id: int, data: dict) -> Order:
+async def update_order(db: AsyncSession, order_id: int, data: dict, user_id: int | None = None) -> Order:
     order = await get_order(db, order_id)
     new_status = data.get("status")
     for key, value in data.items():
@@ -109,6 +110,15 @@ async def update_order(db: AsyncSession, order_id: int, data: dict) -> Order:
         for item in result.scalars():
             if new_status == "done":
                 item.status = "used"
+                activity.add_event(
+                    db,
+                    activity.USE,
+                    user_id,
+                    material_id=item.material_id,
+                    stock_item_id=item.id,
+                    length_mm=item.length_mm,
+                    details={"order_id": order_id},
+                )
             else:
                 item.status = "in_stock"
                 item.order_id = None
@@ -200,6 +210,18 @@ async def receive_items(
         for _ in range(count)
     ]
     db.add_all(items)
+    await db.flush()  # assigns ids
+    activity.add_event(
+        db,
+        activity.RECEIVE,
+        user_id,
+        material_id=material_id,
+        # A delivery of several pieces is one entry; it points at a piece only when there is one
+        stock_item_id=items[0].id if count == 1 else None,
+        quantity=count,
+        length_mm=length_mm * count,
+        details={"piece_length_mm": length_mm, "item_ids": [item.id for item in items]},
+    )
     await db.commit()
     return await get_items_by_ids(db, [item.id for item in items])
 
@@ -237,22 +259,39 @@ async def release_item(db: AsyncSession, item_id: int) -> StockItem:
     return await get_item(db, item_id)
 
 
-async def use_item(db: AsyncSession, item_id: int) -> StockItem:
+async def use_item(db: AsyncSession, item_id: int, user_id: int | None = None) -> StockItem:
     """Mark a reserved piece as consumed by its order."""
     item = await get_item(db, item_id)
     if item.status != "reserved":
         raise DomainError(f"Only a reserved piece can be marked as used (current status: {item.status})")
     item.status = "used"
+    activity.add_event(
+        db,
+        activity.USE,
+        user_id,
+        material_id=item.material_id,
+        stock_item_id=item.id,
+        length_mm=item.length_mm,
+        details={"order_id": item.order_id},
+    )
     await db.commit()
     return await get_item(db, item_id)
 
 
-async def scrap_item(db: AsyncSession, item_id: int) -> StockItem:
+async def scrap_item(db: AsyncSession, item_id: int, user_id: int | None = None) -> StockItem:
     """Write a free piece off as scrap."""
     item = await get_item(db, item_id)
     if item.status != "in_stock":
         raise DomainError(f"Only a piece in stock can be scrapped (current status: {item.status})")
     item.status = "scrap"
+    activity.add_event(
+        db,
+        activity.SCRAP,
+        user_id,
+        material_id=item.material_id,
+        stock_item_id=item.id,
+        length_mm=item.length_mm,
+    )
     await db.commit()
     return await get_item(db, item_id)
 

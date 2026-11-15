@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.errors import DomainError, NotFoundError
 from app.models.Alchemy_models import CutOperation, Location, StockItem, User
+from app.repo import activity
 from app.repo.stock import ITEM_LOAD, check_order_is_open, get_material
 
 CUT_LOAD = (
@@ -179,9 +180,10 @@ async def cut_item(
             created_by_id=user_id,
         ))
 
+    scrap = None
     if plan.remainder_mm > 0:
         keep = plan.remainder_mm >= material.min_usable_length_mm and not scrap_remainder
-        db.add(StockItem(
+        remainder = StockItem(
             material_id=source.material_id,
             length_mm=plan.remainder_mm,
             status="in_stock" if keep else "scrap",
@@ -191,7 +193,27 @@ async def cut_item(
             cut_operation_id=operation.id,
             note="Остаток после резки" if keep else "Отходы после резки",
             created_by_id=user_id,
-        ))
+        )
+        db.add(remainder)
+        if not keep:
+            scrap = remainder
+
+    # Journal: the cut itself, then what was consumed and what was lost in it
+    journal = {"material_id": source.material_id, "cut_operation_id": operation.id}
+    activity.add_event(
+        db, activity.CUT, user_id, stock_item_id=source.id, length_mm=source.length_mm,
+        details={"pieces_mm": [p["length_mm"] for p in pieces], "remainder_mm": plan.remainder_mm}, **journal,
+    )
+    used_lengths = [p["length_mm"] for p in pieces if p.get("used")]
+    if used_lengths:
+        activity.add_event(
+            db, activity.USE, user_id, quantity=len(used_lengths), length_mm=sum(used_lengths), **journal
+        )
+    if scrap is not None:
+        await db.flush()  # assigns scrap.id
+        activity.add_event(
+            db, activity.SCRAP, user_id, stock_item_id=scrap.id, length_mm=scrap.length_mm, **journal
+        )
 
     source.status = "cut"
     await db.commit()

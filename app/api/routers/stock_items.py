@@ -81,12 +81,16 @@ async def release_item(item_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{item_id}/use", response_model=StockItemRead)
-async def use_item(item_id: int, db: AsyncSession = Depends(get_db)):
+async def use_item(
+    item_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+):
     """Mark a reserved piece as consumed by its order."""
-    return await stock.use_item(db, item_id)
+    return await stock.use_item(db, item_id, user_id=current_user.id)
 
 
 @router.post("/{item_id}/scrap", response_model=StockItemRead)
-async def scrap_item(item_id: int, db: AsyncSession = Depends(get_db)):
+async def scrap_item(
+    item_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+):
     """Write a free piece off as scrap."""
-    return await stock.scrap_item(db, item_id)
+    return await stock.scrap_item(db, item_id, user_id=current_user.id)

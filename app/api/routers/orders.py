@@ -3,7 +3,9 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.models.Alchemy_models import User
 from app.repo import stock
 from app.schemas.stock import OrderCreate, OrderDetail, OrderRead, OrderStatus, OrderUpdate
 
@@ -35,9 +37,16 @@ async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{order_id}", response_model=OrderRead)
-async def edit_order(order_id: int, order_in: OrderUpdate, db: AsyncSession = Depends(get_db)):
+async def edit_order(
+    order_id: int,
+    order_in: OrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Update the given fields of an order.
     Status "done" marks its reserved pieces as used; "cancelled" returns them to stock.
     """
-    return await stock.update_order(db, order_id, order_in.model_dump(exclude_unset=True))
+    return await stock.update_order(
+        db, order_id, order_in.model_dump(exclude_unset=True), user_id=current_user.id
+    )
