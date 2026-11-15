@@ -213,7 +213,7 @@ Authorization: Bearer <access_token>
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/stock-items/` | Список с фильтрами `status`, `material_id`, `order_id`, `location_id`, `min_length_mm` |
+| GET | `/stock-items/` | Список с фильтрами `status`, `material_id`, `order_id`, `location_id`, `min_length_mm`, `number` |
 | POST | `/stock-items/` | Приход: создать `count` заготовок одной длины (201) |
 | GET | `/stock-items/{id}` | Одна заготовка |
 | GET | `/stock-items/{id}/history` | Происхождение: `ancestors` (от родителя до исходной трубы) и `children` (что из неё вырезано) |
@@ -222,6 +222,8 @@ Authorization: Bearer <access_token>
 | POST | `/stock-items/{id}/release` | Снять резерв |
 | POST | `/stock-items/{id}/use` | Отметить использованной в заказе |
 | POST | `/stock-items/{id}/scrap` | Списать в отходы |
+
+Поиск по номеру: `GET /stock-items/?number=T-000123`. Номер можно писать как на трубе или короче: `T-000123`, `t123`, `123`, `№ 123`, с русской «Т». Совпадение точное: `1` не найдёт `T-000010`. Ответ — список из одной заготовки или пустой; статус не важен, пока не задан фильтр `status`. Нераспознанный номер — 422.
 
 Приход: `{"material_id": 1, "length_mm": 6000, "count": 3, "location_id": 2}`.
 

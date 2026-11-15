@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -26,9 +26,10 @@ async def get_items(
     order_id: int | None = None,
     location_id: int | None = None,
     min_length_mm: int | None = None,
+    number: str | None = Query(None, max_length=30, description="Piece number: T-000123 or 123"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch stock items with optional filters."""
+    """Fetch stock items with optional filters. `number` finds one piece by its number."""
     return await stock.list_items(
         db,
         status=status,
@@ -36,6 +37,7 @@ async def get_items(
         order_id=order_id,
         location_id=location_id,
         min_length_mm=min_length_mm,
+        number=number,
     )
 
 

@@ -136,6 +136,21 @@ async def get_order_items(db: AsyncSession, order_id: int):
 
 
 # --- Stock items ---
+def parse_item_number(text: str) -> int:
+    """
+    Turn a piece number as people write it into its id.
+    "T-000123", "t123", "Т 123" (Cyrillic letter) and "123" all mean piece 123.
+    """
+    digits = text.strip().upper().lstrip("TТ").strip(" -№#")
+    if not digits.isascii() or not digits.isdigit():
+        raise DomainError("Piece number must look like T-000123 or 123", status_code=422)
+    number = int(digits)
+    # Larger values do not fit the integer id column
+    if not 0 < number <= 2_147_483_647:
+        raise DomainError("Piece number must look like T-000123 or 123", status_code=422)
+    return number
+
+
 async def list_items(
     db: AsyncSession,
     status: str | None = None,
@@ -143,8 +158,11 @@ async def list_items(
     order_id: int | None = None,
     location_id: int | None = None,
     min_length_mm: int | None = None,
+    number: str | None = None,
 ):
     query = select(StockItem).options(*ITEM_LOAD).order_by(StockItem.id)
+    if number is not None:
+        query = query.where(StockItem.id == parse_item_number(number))
     if status:
         query = query.where(StockItem.status == status)
     if material_id is not None:

@@ -13,7 +13,14 @@ const materialTitle = (m) => [m.name, m.color, m.sku && `арт. ${m.sku}`].filt
 // Заготовки: каждая труба или профиль — отдельная запись со своей длиной
 export const StockPage = () => {
   const [status, setStatus] = useState('in_stock');
-  const [items, reload, loadError] = useList(`/stock-items/${status ? `?status=${status}` : ''}`);
+  const [search, setSearch] = useState('');
+  // A number is looked up as soon as it has a digit; the status filter is
+  // ignored then, because the piece may already be cut or used
+  const searchNumber = search.replace(/\D/g, '');
+  const listPath = searchNumber
+    ? `/stock-items/?number=${searchNumber}`
+    : `/stock-items/${status ? `?status=${status}` : ''}`;
+  const [items, reload, loadError] = useList(listPath);
   const [materials] = useList('/materials/');
   const [locations] = useList('/locations/');
   const [form, setForm] = useState(emptyReceive);
@@ -104,8 +111,18 @@ export const StockPage = () => {
         <div className="card-head">
           <h2>Заготовки</h2>
           <label className="inline-filter">
+            Номер
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="T-000123 или 123"
+              maxLength={30}
+            />
+          </label>
+          <label className="inline-filter">
             Статус
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select value={status} disabled={Boolean(searchNumber)} onChange={(e) => setStatus(e.target.value)}>
               <option value="">Все</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -115,7 +132,11 @@ export const StockPage = () => {
         </div>
 
         {items.length === 0 ? (
-          <p className="muted">Заготовок с таким статусом нет</p>
+          <p className="muted">
+            {searchNumber
+              ? `Заготовки с номером T-${searchNumber.padStart(6, '0')} нет`
+              : 'Заготовок с таким статусом нет'}
+          </p>
         ) : (
           <>
             <p className="muted card-hint">

@@ -335,7 +335,12 @@ a.btn-ghost {
   color: #aaa;
 }
 
-.inline-filter select {
+.card-head .inline-filter:first-of-type {
+  margin-left: auto;
+}
+
+.inline-filter select,
+.inline-filter input {
   padding: 0.35rem 0.6rem;
   background: #1c1c1c;
   border: 1px solid rgba(255, 255, 255, 0.2);
