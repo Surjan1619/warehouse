@@ -193,3 +193,39 @@ class CutSuggestResponse(BaseModel):
     candidates: list[CutCandidate]
     # Longest free piece of this material, to explain an empty list
     longest_available_mm: int | None = None
+
+
+# --- Cutting pieces out of several stock items ---
+class MultiCutPlanRequest(BaseModel):
+    material_id: int
+    pieces: list[CutPiece] = Field(..., min_length=1, max_length=100)
+    # Defaults to the kerf of the material
+    kerf_mm: int | None = Field(None, ge=0, le=100)
+
+
+class PlannedCut(BaseModel):
+    """One stock item of the plan and the pieces to cut from it."""
+    item: StockItemRead
+    pieces: list[CutPiece]
+    remainder_mm: int
+    kerf_loss_mm: int
+    remainder_fate: Literal["none", "stock", "scrap"]
+
+
+class MultiCutPlan(BaseModel):
+    # Fullest items first
+    cuts: list[PlannedCut]
+    # Pieces longer than every free stock item
+    unplaced: list[CutPiece]
+    longest_available_mm: int | None = None
+
+
+class BatchCut(BaseModel):
+    source_item_id: int
+    pieces: list[CutPiece] = Field(..., min_length=1, max_length=100)
+    note: str | None = Field(None, max_length=500)
+
+
+class BatchCutRequest(BaseModel):
+    """Several cuts that are saved together or not at all."""
+    cuts: list[BatchCut] = Field(..., min_length=1, max_length=50)

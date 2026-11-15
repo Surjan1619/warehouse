@@ -26,7 +26,9 @@ const REMAINDER_TEXT = {
  * 1. работник выбирает материал и вводит нужные куски;
  * 2. система показывает, из каких заготовок их можно вырезать, начиная
  *    с самой экономной, и работник подтверждает резку.
- * Подбор и расчёт остатка делает сервер (POST /cuts/suggest).
+ * Подбор и расчёт остатка делает сервер (POST /cuts/suggest). Если куски
+ * не помещаются в одну заготовку, сервер раскладывает их по нескольким
+ * (POST /cuts/plan), и они режутся одной операцией (POST /cuts/batch).
  */
 export const CutPage = () => {
   const [params] = useSearchParams();
@@ -39,6 +41,9 @@ export const CutPage = () => {
   const [pieces, setPieces] = useState([newPiece()]);
   const [suggestion, setSuggestion] = useState(null);
   const [chosenId, setChosenId] = useState(null);
+  // Layout over several pieces, when no single one can hold everything
+  const [multiPlan, setMultiPlan] = useState(null);
+  // Finished cut operations, shown until the next request
   const [result, setResult] = useState(null);
   const { error, busy, run } = useAction();
 
@@ -51,7 +56,10 @@ export const CutPage = () => {
     change();
     setSuggestion(null);
     setChosenId(null);
+    setMultiPlan(null);
   };
+
+  const requestedPieces = () => pieces.map((p) => ({ length_mm: Number(p.length_mm), used: p.used }));
 
   const updatePiece = (index, changes) =>
     setPieces(pieces.map((p, i) => (i === index ? { ...p, ...changes } : p)));
@@ -72,13 +80,21 @@ export const CutPage = () => {
     e.preventDefault();
     setResult(null);
     let found = null;
+    let layout = null;
     const ok = await run(async () => {
       found = await api('/cuts/suggest', {
         method: 'POST',
         body: { material_id: Number(materialId), pieces: lengths },
       });
+      if (found.candidates.length === 0) {
+        layout = await api('/cuts/plan', {
+          method: 'POST',
+          body: { material_id: Number(materialId), pieces: requestedPieces() },
+        });
+      }
     }, '');
     if (!ok) return;
+    setMultiPlan(layout);
 
     // In a group of identical pieces, take the one the worker came with
     const candidates = found.candidates.map((c) =>
@@ -94,16 +110,32 @@ export const CutPage = () => {
     const ok = await run(async () => {
       operation = await api('/cuts/', {
         method: 'POST',
+        body: { source_item_id: chosenId, pieces: requestedPieces() },
+      });
+    }, '');
+    if (!ok) return;
+    finish([operation]);
+  };
+
+  const cutAll = async () => {
+    let operations = null;
+    const ok = await run(async () => {
+      operations = await api('/cuts/batch', {
+        method: 'POST',
         body: {
-          source_item_id: chosenId,
-          pieces: pieces.map((p) => ({ length_mm: Number(p.length_mm), used: p.used })),
+          cuts: multiPlan.cuts.map((c) => ({ source_item_id: c.item.id, pieces: c.pieces })),
         },
       });
     }, '');
     if (!ok) return;
-    setResult(operation);
+    finish(operations);
+  };
+
+  const finish = (operations) => {
+    setResult(operations);
     setSuggestion(null);
     setChosenId(null);
+    setMultiPlan(null);
     setPieces([newPiece()]);
   };
 
@@ -212,16 +244,71 @@ export const CutPage = () => {
         <Messages error={error || loadError} />
       </section>
 
-      {suggestion && (
+      {multiPlan && (
+        <section className="card">
+          <h2>2. Из чего резать</h2>
+          {multiPlan.cuts.length === 0 ? (
+            <p className="muted">
+              {multiPlan.longest_available_mm
+                ? `Ни один кусок не помещается: самая длинная заготовка на складе — ${mm(multiPlan.longest_available_mm)}.`
+                : 'Этого материала на складе нет.'}
+            </p>
+          ) : (
+            <>
+              <p className="muted card-hint">
+                В одну заготовку всё не помещается, поэтому куски разложены по {multiPlan.cuts.length} шт.
+                Все они режутся одной операцией.
+              </p>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Заготовка</th>
+                      <th className="num">Длина, мм</th>
+                      <th>Место</th>
+                      <th>Куски, мм</th>
+                      <th className="num">Остаток, мм</th>
+                      <th>Что с остатком</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {multiPlan.cuts.map((c) => (
+                      <tr key={c.item.id}>
+                        <td className="code">{c.item.code}</td>
+                        <td className="num">{c.item.length_mm.toLocaleString('ru-RU')}</td>
+                        <td>{c.item.location?.name || '—'}</td>
+                        <td className="wrap">{c.pieces.map((p) => p.length_mm.toLocaleString('ru-RU')).join(' + ')}</td>
+                        <td className="num">{c.remainder_mm.toLocaleString('ru-RU')}</td>
+                        <td className={c.remainder_fate === 'scrap' ? 'warn' : 'muted'}>
+                          {REMAINDER_TEXT[c.remainder_fate]}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {multiPlan.unplaced.length > 0 && (
+                <p className="error" role="alert">
+                  Не хватило заготовок на {multiPlan.unplaced.length} шт.:{' '}
+                  {multiPlan.unplaced.map((p) => p.length_mm.toLocaleString('ru-RU')).join(', ')} мм. Они разрезаны не
+                  будут.
+                </p>
+              )}
+
+              <button className="btn form-submit" type="button" disabled={busy} onClick={cutAll}>
+                Разрезать {multiPlan.cuts.length} шт.
+              </button>
+            </>
+          )}
+        </section>
+      )}
+
+      {suggestion && !multiPlan && (
         <section className="card">
           <h2>2. Из чего резать</h2>
           {suggestion.candidates.length === 0 ? (
-            <p className="muted">
-              Нет заготовки, в которую помещаются все куски: нужно {mm(suggestion.required_mm)}
-              {suggestion.longest_available_mm
-                ? `, а самая длинная на складе — ${mm(suggestion.longest_available_mm)}. Уберите часть кусков и разрежьте их из другой заготовки.`
-                : ', а этого материала на складе нет.'}
-            </p>
+            <p className="muted">Подходящих заготовок нет.</p>
           ) : (
             <>
               <p className="muted card-hint">
@@ -295,15 +382,15 @@ export const CutPage = () => {
 
       {result && (
         <section className="card">
-          <h2>Готово: {result.source_item.code} разрезана</h2>
-          <p className="muted card-hint">
-            Напишите новые номера на кусках, которые остаются на складе.
-            {result.kerf_loss_mm > 0 && ` Потери на рез: ${mm(result.kerf_loss_mm)}.`}
-          </p>
+          <h2>
+            Готово: {result.length === 1 ? `${result[0].source_item.code} разрезана` : `разрезано ${result.length} шт.`}
+          </h2>
+          <p className="muted card-hint">Напишите новые номера на кусках, которые остаются на складе.</p>
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
+                  <th>Из заготовки</th>
                   <th>Номер</th>
                   <th className="num">Длина, мм</th>
                   <th>Статус</th>
@@ -311,14 +398,17 @@ export const CutPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {result.results.map((item) => (
-                  <tr key={item.id}>
-                    <td className="code">{item.code}</td>
-                    <td className="num">{item.length_mm.toLocaleString('ru-RU')}</td>
-                    <td><span className={`status status-${item.status}`}>{STATUS_LABELS[item.status]}</span></td>
-                    <td className="muted">{item.note || ''}</td>
-                  </tr>
-                ))}
+                {result.flatMap((operation) =>
+                  operation.results.map((item, index) => (
+                    <tr key={item.id} className={index === 0 ? 'group-start' : ''}>
+                      <td className="code muted">{index === 0 ? operation.source_item.code : ''}</td>
+                      <td className="code">{item.code}</td>
+                      <td className="num">{item.length_mm.toLocaleString('ru-RU')}</td>
+                      <td><span className={`status status-${item.status}`}>{STATUS_LABELS[item.status]}</span></td>
+                      <td className="muted">{item.note || ''}</td>
+                    </tr>
+                  )),
+                )}
               </tbody>
             </table>
           </div>

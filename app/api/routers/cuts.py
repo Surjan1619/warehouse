@@ -7,7 +7,15 @@ from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.models.Alchemy_models import User
 from app.repo import cutting
-from app.schemas.stock import CutRead, CutRequest, CutSuggestRequest, CutSuggestResponse
+from app.schemas.stock import (
+    BatchCutRequest,
+    CutRead,
+    CutRequest,
+    CutSuggestRequest,
+    CutSuggestResponse,
+    MultiCutPlan,
+    MultiCutPlanRequest,
+)
 
 router = APIRouter()
 
@@ -23,6 +31,34 @@ async def suggest(suggest_in: CutSuggestRequest, db: AsyncSession = Depends(get_
         material_id=suggest_in.material_id,
         piece_lengths_mm=suggest_in.pieces,
         kerf_mm=suggest_in.kerf_mm,
+    )
+
+
+@router.post("/plan", response_model=MultiCutPlan)
+async def plan(plan_in: MultiCutPlanRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Propose how to cut the given pieces out of several stock items when they
+    do not fit into one. Nothing is changed; pass the result to POST /cuts/batch.
+    """
+    return await cutting.plan_multi_cut(
+        db,
+        material_id=plan_in.material_id,
+        pieces=[piece.model_dump() for piece in plan_in.pieces],
+        kerf_mm=plan_in.kerf_mm,
+    )
+
+
+@router.post("/batch", response_model=List[CutRead], status_code=201)
+async def cut_batch(
+    batch_in: BatchCutRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cut several stock items as one action: either every cut is saved or none."""
+    return await cutting.cut_many(
+        db,
+        cuts=[cut.model_dump() for cut in batch_in.cuts],
+        user_id=current_user.id,
     )
 
 

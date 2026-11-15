@@ -53,6 +53,115 @@ def plan_cut(source_length_mm: int, piece_lengths_mm: list[int], kerf_mm: int) -
     )
 
 
+def pack_pieces(
+    items: list[tuple[int, int]], piece_lengths_mm: list[int], kerf_mm: int, min_usable_length_mm: int = 0
+) -> tuple[dict[int, list[int]], list[int]]:
+    """
+    Spread pieces over several stock items.
+
+    `items` are (id, length) pairs of the free stock. Returns which pieces go
+    to which item, as indexes into `piece_lengths_mm`, and the indexes of the
+    pieces that fit nowhere.
+
+    First-fit-decreasing with best fit: pieces are placed longest first. A
+    piece goes into the already started item where it leaves the least room;
+    if it fits none of them, an untouched item is started: an exact fit if
+    there is one, otherwise the shortest item that leaves a usable remainder,
+    and only as a last resort one whose remainder would be too short to keep.
+    Starting short items first uses up offcuts before whole pieces.
+    This is a heuristic: the result is good, but not always the best possible.
+    """
+    free = sorted(items, key=lambda item: (item[1], item[0]))  # shortest first, then oldest
+    started: list[dict] = []  # each: id, length, pieces (indexes), used (length incl. kerf)
+    unplaced: list[int] = []
+
+    def room_after(bin_, length: int) -> int:
+        # Another piece in a started item costs its length plus one cut
+        return bin_["length"] - bin_["used"] - kerf_mm - length
+
+    order = sorted(range(len(piece_lengths_mm)), key=lambda i: (-piece_lengths_mm[i], i))
+    for index in order:
+        length = piece_lengths_mm[index]
+
+        fitting = [b for b in started if room_after(b, length) >= 0]
+        if fitting:
+            target = min(fitting, key=lambda b: (room_after(b, length), b["id"]))
+            target["pieces"].append(index)
+            target["used"] += kerf_mm + length
+            continue
+
+        def waste_rank(position: int) -> tuple[int, int]:
+            # 0: exact fit, 1: leaves a usable remainder, 2: leaves scrap.
+            # `free` is sorted, so the position breaks ties towards the shortest item.
+            left = free[position][1] - length - kerf_mm
+            if free[position][1] == length:
+                return 0, position
+            return (1 if left >= min_usable_length_mm else 2), position
+
+        candidates = [i for i, (_, item_length) in enumerate(free) if item_length >= length]
+        if not candidates:
+            unplaced.append(index)
+            continue
+        item_id, item_length = free.pop(min(candidates, key=waste_rank))
+        started.append({"id": item_id, "length": item_length, "pieces": [index], "used": length})
+
+    return {b["id"]: sorted(b["pieces"]) for b in started}, sorted(unplaced)
+
+
+async def plan_multi_cut(
+    db: AsyncSession,
+    material_id: int,
+    pieces: list[dict],
+    kerf_mm: int | None = None,
+) -> dict:
+    """
+    Propose how to cut the given pieces out of several free stock items.
+    Nothing is changed; the result is meant to be passed to cut_many.
+    """
+    material = await get_material(db, material_id)
+    kerf = material.kerf_mm if kerf_mm is None else kerf_mm
+
+    result = await db.execute(
+        select(StockItem)
+        .options(*ITEM_LOAD)
+        .where(StockItem.material_id == material_id, StockItem.status == "in_stock")
+        .order_by(StockItem.id)
+        .execution_options(populate_existing=True)
+    )
+    items = {item.id: item for item in result.scalars().all()}
+
+    lengths = [piece["length_mm"] for piece in pieces]
+    assignment, unplaced = pack_pieces(
+        [(i.id, i.length_mm) for i in items.values()], lengths, kerf, material.min_usable_length_mm
+    )
+
+    cuts = []
+    for item_id, indexes in assignment.items():
+        item = items[item_id]
+        plan = plan_cut(item.length_mm, [lengths[i] for i in indexes], kerf)
+        cuts.append({
+            "item": item,
+            "pieces": [pieces[i] for i in indexes],
+            "remainder_mm": plan.remainder_mm,
+            "kerf_loss_mm": plan.kerf_loss_mm,
+            "remainder_fate": _remainder_fate(plan.remainder_mm, material.min_usable_length_mm),
+        })
+    # Fullest items first: they are the ones cut with the least left over
+    cuts.sort(key=lambda cut: (cut["remainder_mm"], cut["item"].id))
+
+    return {
+        "cuts": cuts,
+        "unplaced": [pieces[i] for i in unplaced],
+        "longest_available_mm": max((i.length_mm for i in items.values()), default=None),
+    }
+
+
+def _remainder_fate(remainder_mm: int, min_usable_length_mm: int) -> str:
+    if remainder_mm == 0:
+        return "none"
+    return "stock" if remainder_mm >= min_usable_length_mm else "scrap"
+
+
 async def suggest_sources(
     db: AsyncSession,
     material_id: int,
@@ -90,18 +199,12 @@ async def suggest_sources(
             groups[key]["item_ids"].append(item.id)
             continue
         plan = plan_cut(item.length_mm, piece_lengths_mm, kerf)
-        if plan.remainder_mm == 0:
-            fate = "none"
-        elif plan.remainder_mm >= material.min_usable_length_mm:
-            fate = "stock"
-        else:
-            fate = "scrap"
         groups[key] = {
             "item": item,
             "item_ids": [item.id],
             "remainder_mm": plan.remainder_mm,
             "kerf_loss_mm": plan.kerf_loss_mm,
-            "remainder_fate": fate,
+            "remainder_fate": _remainder_fate(plan.remainder_mm, material.min_usable_length_mm),
         }
 
     candidates = sorted(groups.values(), key=lambda g: (g["remainder_mm"], g["item"].id))
@@ -115,7 +218,7 @@ async def suggest_sources(
     }
 
 
-async def cut_item(
+async def _apply_cut(
     db: AsyncSession,
     source_item_id: int,
     pieces: list[dict],
@@ -123,10 +226,11 @@ async def cut_item(
     scrap_remainder: bool = False,
     note: str | None = None,
     user_id: int | None = None,
-) -> CutOperation:
+) -> int:
     """
-    Cut a stock item. The source is kept with status "cut"; every piece and
-    the remainder become new stock items that point back to it.
+    Cut a stock item inside the caller's transaction, without committing.
+    The source is kept with status "cut"; every piece and the remainder
+    become new stock items that point back to it. Returns the operation id.
     """
     # Lock the source row so that two simultaneous cuts cannot both succeed
     result = await db.execute(
@@ -216,8 +320,44 @@ async def cut_item(
         )
 
     source.status = "cut"
+    await db.flush()
+    return operation.id
+
+
+async def cut_item(
+    db: AsyncSession,
+    source_item_id: int,
+    pieces: list[dict],
+    kerf_mm: int | None = None,
+    scrap_remainder: bool = False,
+    note: str | None = None,
+    user_id: int | None = None,
+) -> CutOperation:
+    """Cut one stock item and save the result."""
+    operation_id = await _apply_cut(
+        db, source_item_id, pieces, kerf_mm=kerf_mm, scrap_remainder=scrap_remainder, note=note, user_id=user_id
+    )
     await db.commit()
-    return await get_cut(db, operation.id)
+    return await get_cut(db, operation_id)
+
+
+async def cut_many(db: AsyncSession, cuts: list[dict], user_id: int | None = None) -> list[CutOperation]:
+    """
+    Cut several stock items as one action: either every cut is saved or none.
+    Each element of `cuts` holds `source_item_id` and `pieces`.
+    """
+    operation_ids = []
+    try:
+        for cut in cuts:
+            operation_ids.append(
+                await _apply_cut(db, cut["source_item_id"], cut["pieces"], note=cut.get("note"), user_id=user_id)
+            )
+    except Exception:
+        # Undo the cuts already applied in this batch
+        await db.rollback()
+        raise
+    await db.commit()
+    return [await get_cut(db, operation_id) for operation_id in operation_ids]
 
 
 def _piece_status(piece: dict) -> str:
