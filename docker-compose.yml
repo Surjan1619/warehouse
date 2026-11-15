@@ -34,6 +34,8 @@ services:
       - ./app:/srv/app
       - ./alembic:/srv/alembic
       - ./scripts:/srv/scripts
+      - ./tests:/srv/tests
+      - ./pytest.ini:/srv/pytest.ini
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

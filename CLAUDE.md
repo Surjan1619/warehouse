@@ -4,6 +4,8 @@ WMS (Warehouse Management System): учёт товаров на складе. Б
 
 Подробности: [README.md](README.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/API.md](docs/API.md), [docs/DATABASE.md](docs/DATABASE.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
 
+План работ — [docs/TODO.md](docs/TODO.md). Владелец хочет двигаться маленькими шагами: один пункт плана за раз, после каждого — проверка и отметка `[x]` в плане.
+
 ## Команды
 
 Все команды бэкенда запускаются из корня репозитория: `.env` читается по относительному пути.
@@ -39,7 +41,16 @@ docker compose up -d db      # только база, остальное лок�
 
 Compose берёт `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` из `.env` (образец — `.env.example`) и сам подставляет бэкенду `DATABASE_URL` с хостом `db`.
 
-Тестов в проекте нет. Проверять изменения нужно вручную: Swagger на `/docs` или фронтенд.
+Тесты бэкенда — pytest в `tests/`, запускаются в контейнере:
+
+```bash
+docker compose exec backend pytest            # весь набор
+docker compose exec backend pytest tests/test_cutting.py -k suggest
+```
+
+Тесты работают на отдельной базе `<имя основной>_test` на том же сервере PostgreSQL: она создаётся при первом запуске, таблицы пересобираются из моделей, перед каждым тестом очищаются. Рабочие данные не затрагиваются. У фронтенда автотестов нет, его проверять в браузере.
+
+**Требование владельца (15.11.2026):** после каждой новой функции писать на неё тесты и прогонять весь набор; шаг не считается сделанным, пока набор не зелёный.
 
 ## Структура
 
@@ -59,6 +70,8 @@ app/
   schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory
 alembic/versions/          # миграции
 scripts/create_admin.py
+tests/conftest.py          # фикстуры: тестовая база, client, admin, worker, material, receive
+tests/test_*.py            # тесты API: резка и подбор, заготовки, вход и права
 frontend/src/App.jsx       # маршруты, вход, главная, пользователи
 frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
 frontend/src/hooks.js      # useList, useAction — общая логика страниц
@@ -81,7 +94,8 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage
 - **Изменение моделей = миграция.** После правки `Alchemy_models.py` создать ревизию через `alembic revision --autogenerate` и просмотреть её вручную. Для внешних ключей задавать имя ограничения явно: в ревизии `79c14ac440ea` стоит `None`, из-за чего её `downgrade` не сработает.
 - **Новый роутер** нужно подключить в `app/main.py` через `include_router` с `dependencies=authenticated`, иначе он примет токен отключённого пользователя. Если эндпоинт должен быть доступен без токена, добавить путь в список в `app/middleware/auth.py`.
 - **Права.** Роли — `admin` и `worker`. Для действий только администратора использовать `Depends(require_admin)`. Скрытие кнопок во фронтенде защитой не считается.
-- **Пользователей не удалять**, а отключать через `is_active`: на них ссылается `cut_operations.user_id`.
+- **Пользователей не удалять**, а отключать через `is_active`: на них ссылаются `cut_operations.user_id` и `stock_items.created_by_id`.
+- **Автор действия.** Эндпоинт, который что-то создаёт, берёт пользователя через `Depends(get_current_user)` и передаёт его `id` в `repo`. У заготовки автор — `created_by_id`: кто принял её на склад или сделал резку, из которой она получилась.
 - **БД — только PostgreSQL**: используется `JSONB` и драйвер `asyncpg`.
 - **Новая страница фронтенда** — отдельный файл в `frontend/src/pages/`, маршрут в `App.jsx`, ссылка в `components/Layout.jsx`. Списки загружать через `useList`, действия выполнять через `useAction`, как в `pages/ProductsPage.jsx`. Файл с компонентами не должен экспортировать ничего, кроме компонентов (правило oxlint), константы класть в `labels.js`.
 - **Фронтенд.** Запросы делать через `api()` из `frontend/src/api.js`, а не через `fetch` напрямую: она добавляет токен и обрабатывает 401. Адрес API задаётся в `VITE_API_URL` (по умолчанию `http://localhost:8000`). CORS на бэкенде разрешает только `http://localhost:5173`.

@@ -14,6 +14,7 @@ ITEM_LOAD = (
     joinedload(StockItem.material),
     joinedload(StockItem.location),
     joinedload(StockItem.order),
+    joinedload(StockItem.created_by),
 )
 
 ACTIVE_ORDER_STATUSES = ("new", "in_progress")
@@ -183,11 +184,19 @@ async def receive_items(
     count: int,
     location_id: int | None,
     note: str | None,
+    user_id: int | None = None,
 ):
+    """Put `count` identical pieces into stock; `user_id` is who received them."""
     await get_material(db, material_id)
     await _check_location(db, location_id)
     items = [
-        StockItem(material_id=material_id, length_mm=length_mm, location_id=location_id, note=note)
+        StockItem(
+            material_id=material_id,
+            length_mm=length_mm,
+            location_id=location_id,
+            note=note,
+            created_by_id=user_id,
+        )
         for _ in range(count)
     ]
     db.add_all(items)

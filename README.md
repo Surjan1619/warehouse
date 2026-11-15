@@ -110,6 +110,7 @@ npm run dev
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — устройство бэкенда и фронтенда, путь запроса, авторизация
 - [docs/API.md](docs/API.md) — все эндпоинты с форматами запросов и ответов
 - [docs/DATABASE.md](docs/DATABASE.md) — таблицы, связи, история миграций
+- [docs/TODO.md](docs/TODO.md) — план работ маленькими шагами
 - [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) — найденные ошибки и недоделки, по приоритету
 - [CLAUDE.md](CLAUDE.md) — инструкции для Claude Code
 
@@ -128,4 +129,4 @@ npm run dev
 | История происхождения заготовки | API работает, страниц во фронтенде нет |
 | Редактирование товара | Есть только схема `ProductUpdate`, эндпоинта нет |
 | Продажа штучного товара | Логика в `app/repo/inventory.py`, эндпоинта нет |
-| Тесты | Нет |
+| Автотесты бэкенда (резка, подбор, заготовки, вход и права) | 56 тестов, запуск `docker compose exec backend pytest` |

@@ -1,0 +1,4 @@
+# Needed only to run the tests
+pytest>=8.4
+pytest-asyncio>=1.1
+httpx>=0.28

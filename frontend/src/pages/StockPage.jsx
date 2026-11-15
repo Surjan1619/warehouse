@@ -49,6 +49,8 @@ export const StockPage = () => {
     await reload();
   };
 
+  // Orders are not used on the site yet; keep the column out of the way until they are
+  const showOrders = items.some((item) => item.order);
   const totalLength = items.reduce((sum, item) => sum + item.length_mm, 0);
 
   return (
@@ -128,7 +130,8 @@ export const StockPage = () => {
                     <th className="num">Длина, мм</th>
                     <th>Статус</th>
                     <th>Место</th>
-                    <th>Заказ</th>
+                    {showOrders && <th>Заказ</th>}
+                    <th>Добавил</th>
                     <th>Примечание</th>
                     <th></th>
                   </tr>
@@ -141,7 +144,8 @@ export const StockPage = () => {
                       <td className="num">{item.length_mm.toLocaleString('ru-RU')}</td>
                       <td><span className={`status status-${item.status}`}>{STATUS_LABELS[item.status]}</span></td>
                       <td>{item.location?.name || '—'}</td>
-                      <td>{item.order?.number || '—'}</td>
+                      {showOrders && <td>{item.order?.number || '—'}</td>}
+                      <td>{item.created_by?.username || '—'}</td>
                       <td className="muted">{item.note || ''}</td>
                       <td className="actions">
                         {item.status === 'in_stock' && (

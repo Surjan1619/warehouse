@@ -176,6 +176,7 @@ async def cut_item(
             parent_id=source.id,
             cut_operation_id=operation.id,
             note=piece.get("note"),
+            created_by_id=user_id,
         ))
 
     if plan.remainder_mm > 0:
@@ -189,6 +190,7 @@ async def cut_item(
             parent_id=source.id,
             cut_operation_id=operation.id,
             note="Остаток после резки" if keep else "Отходы после резки",
+            created_by_id=user_id,
         ))
 
     source.status = "cut"

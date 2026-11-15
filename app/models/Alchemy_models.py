@@ -144,9 +144,14 @@ class StockItem(Base):
         ForeignKey("orders.id", name="fk_stock_items_order_id"), nullable=True, index=True
     )
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Who put the piece into the system: received it, or made the cut that produced it
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", name="fk_stock_items_created_by_id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     material: Mapped["Material"] = relationship(back_populates="items")
+    created_by: Mapped["User | None"] = relationship()
     location: Mapped["Location | None"] = relationship()
     order: Mapped["Order | None"] = relationship(back_populates="items")
     parent: Mapped["StockItem | None"] = relationship(remote_side=[id], foreign_keys=[parent_id])

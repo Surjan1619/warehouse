@@ -1,9 +1,11 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.models.Alchemy_models import User
 from app.repo import cutting
 from app.schemas.stock import CutRead, CutRequest, CutSuggestRequest, CutSuggestResponse
 
@@ -25,16 +27,16 @@ async def suggest(suggest_in: CutSuggestRequest, db: AsyncSession = Depends(get_
 
 
 @router.post("/", response_model=CutRead, status_code=201)
-async def cut(cut_in: CutRequest, request: Request, db: AsyncSession = Depends(get_db)):
+async def cut(
+    cut_in: CutRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Cut a stock item into pieces.
     The remainder returns to stock, or becomes scrap when it is shorter than
     the material's minimum usable length.
     """
-    # Set by AuthMiddleware from the token's "sub" claim
-    raw_user_id = getattr(request.state, "user_id", None)
-    user_id = int(raw_user_id) if raw_user_id is not None and str(raw_user_id).isdigit() else None
-
     return await cutting.cut_item(
         db,
         source_item_id=cut_in.source_item_id,
@@ -42,7 +44,7 @@ async def cut(cut_in: CutRequest, request: Request, db: AsyncSession = Depends(g
         kerf_mm=cut_in.kerf_mm,
         scrap_remainder=cut_in.scrap_remainder,
         note=cut_in.note,
-        user_id=user_id,
+        user_id=current_user.id,
     )
 
 

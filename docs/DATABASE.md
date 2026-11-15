@@ -29,7 +29,7 @@ materials 1 ──── * stock_items * ──── 1 orders
                         * ──── 1 users
 ```
 
-`users` связана только с `cut_operations`.
+`users` связана с `cut_operations` (кто резал) и `stock_items` (кто создал запись).
 
 ## Таблицы
 
@@ -122,6 +122,7 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `cut_operation_id` | integer | FK → `cut_operations.id`, nullable; какой резкой создана |
 | `order_id` | integer | FK → `orders.id`, nullable |
 | `note` | varchar(500) | nullable |
+| `created_by_id` | integer | FK → `users.id`, nullable; кто принял заготовку или сделал резку, из которой она получилась. Пусто у заготовок, принятых до 15.11.2026 |
 | `created_at` | timestamp | `now()` |
 
 ### `cut_operations`
@@ -153,6 +154,7 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `a1c3f5e7b902` | Поштучный учёт: `materials`, `orders`, `stock_items`, `cut_operations` |
 | `b2d4a6c8e013` | `users.is_active` |
 | `c3e5b7d9f124` | Ширина реза по умолчанию 0; у существующих материалов сброшена в 0 |
+| `d4f6c8e0a235` | `stock_items.created_by_id`; кускам от прежних резок автор проставлен по автору резки |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 

@@ -91,6 +91,13 @@ class StockItemAssign(BaseModel):
     order_id: int
 
 
+class UserBrief(BaseModel):
+    """Who performed an action; only what is safe to show to any user."""
+    id: int
+    username: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 class StockItemRead(BaseModel):
     id: int
     code: str
@@ -102,6 +109,8 @@ class StockItemRead(BaseModel):
     parent_id: int | None = None
     cut_operation_id: int | None = None
     note: str | None = None
+    # Who received the piece or made the cut that produced it; None for older records
+    created_by: UserBrief | None = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

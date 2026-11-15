@@ -3,7 +3,9 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.models.Alchemy_models import User
 from app.repo import stock
 from app.schemas.stock import (
     ItemStatus,
@@ -38,9 +40,13 @@ async def get_items(
 
 
 @router.post("/", response_model=List[StockItemRead], status_code=201)
-async def receive_items(receive_in: StockItemReceive, db: AsyncSession = Depends(get_db)):
+async def receive_items(
+    receive_in: StockItemReceive,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Put `count` new pieces of one material and length into stock."""
-    return await stock.receive_items(db, **receive_in.model_dump())
+    return await stock.receive_items(db, **receive_in.model_dump(), user_id=current_user.id)
 
 
 @router.get("/{item_id}", response_model=StockItemRead)
