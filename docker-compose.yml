@@ -48,6 +48,8 @@ services:
       - ./frontend/src:/srv/src
       - ./frontend/public:/srv/public
       - ./frontend/index.html:/srv/index.html
+      # Keeps npm scripts (lint, test) in step with the host without a rebuild
+      - ./frontend/package.json:/srv/package.json
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:

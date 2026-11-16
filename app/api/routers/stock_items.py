@@ -9,8 +9,10 @@ from app.models.Alchemy_models import User
 from app.repo import stock
 from app.schemas.stock import (
     ItemStatus,
+    MaterialStock,
     StockItemAssign,
     StockItemHistory,
+    StockItemPage,
     StockItemRead,
     StockItemReceive,
     StockItemUpdate,
@@ -41,6 +43,31 @@ async def get_items(
     )
 
 
+@router.get("/summary", response_model=List[MaterialStock])
+async def get_summary(
+    status: ItemStatus | None = None,
+    location_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per material: number of pieces, total length, shortest and longest piece."""
+    return await stock.summarize_items(db, status=status, location_id=location_id)
+
+
+@router.get("/page", response_model=StockItemPage)
+async def get_page(
+    status: ItemStatus | None = None,
+    material_id: int | None = None,
+    location_id: int | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """One page of stock items, longest first, with the total number that match the filters."""
+    return await stock.page_items(
+        db, status=status, material_id=material_id, location_id=location_id, limit=limit, offset=offset
+    )
+
+
 @router.post("/", response_model=List[StockItemRead], status_code=201)
 async def receive_items(
     receive_in: StockItemReceive,
@@ -66,7 +93,7 @@ async def get_item_history(item_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/{item_id}", response_model=StockItemRead)
 async def edit_item(item_id: int, item_in: StockItemUpdate, db: AsyncSession = Depends(get_db)):
-    """Move a piece to another location or change its note."""
+    """Move a piece to another location, change its note or correct its length."""
     return await stock.update_item(db, item_id, item_in.model_dump(exclude_unset=True))
 
 

@@ -5,6 +5,7 @@ import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { STATUS_LABELS } from '../labels';
 import { useAction, useList } from '../hooks';
+import { addRecent, describePieces, loadRecent, makeEntry, saveRecent, toFormPieces } from '../recentCuts';
 
 const newPiece = () => ({ length_mm: '', used: true, times: '2' });
 
@@ -45,7 +46,9 @@ export const CutPage = () => {
   const [multiPlan, setMultiPlan] = useState(null);
   // Finished cut operations, shown until the next request
   const [result, setResult] = useState(null);
-  const { error, busy, run } = useAction();
+  const { error, notice, busy, run } = useAction();
+  // Jobs done lately in this browser, offered for a one-click repeat
+  const [recent, setRecent] = useState(loadRecent);
 
   const lengths = pieces.map((p) => Number(p.length_mm));
   const piecesValid = lengths.every((l) => l > 0);
@@ -76,21 +79,18 @@ export const CutPage = () => {
     );
   };
 
-  const findSources = async (e) => {
-    e.preventDefault();
+  // Ask the server what to cut the given pieces from
+  const search = async (material, wanted) => {
     setResult(null);
     let found = null;
     let layout = null;
     const ok = await run(async () => {
       found = await api('/cuts/suggest', {
         method: 'POST',
-        body: { material_id: Number(materialId), pieces: lengths },
+        body: { material_id: material, pieces: wanted.map((p) => p.length_mm) },
       });
       if (found.candidates.length === 0) {
-        layout = await api('/cuts/plan', {
-          method: 'POST',
-          body: { material_id: Number(materialId), pieces: requestedPieces() },
-        });
+        layout = await api('/cuts/plan', { method: 'POST', body: { material_id: material, pieces: wanted } });
       }
     }, '');
     if (!ok) return;
@@ -103,6 +103,18 @@ export const CutPage = () => {
     const preferred = candidates.find((c) => c.pick_id === preferredId);
     setSuggestion({ ...found, candidates });
     setChosenId((preferred || candidates[0])?.pick_id ?? null);
+  };
+
+  const findSources = (e) => {
+    e.preventDefault();
+    return search(Number(materialId), requestedPieces());
+  };
+
+  // Fill the form with an earlier job and go straight to the choice of pieces
+  const repeat = (entry) => {
+    setMaterialId(String(entry.material_id));
+    setPieces(toFormPieces(entry));
+    return search(entry.material_id, entry.pieces);
   };
 
   const cut = async () => {
@@ -132,12 +144,35 @@ export const CutPage = () => {
   };
 
   const finish = (operations) => {
+    const updated = addRecent(recent, makeEntry(materialId, pieces));
+    setRecent(updated);
+    saveRecent(updated);
     setResult(operations);
     setSuggestion(null);
     setChosenId(null);
     setMultiPlan(null);
     setPieces([newPiece()]);
   };
+
+  // Undo the cuts just made, newest first. Each cut is cancelled on its own,
+  // so after a failure the cuts not yet undone stay on screen.
+  const cancelResult = async () => {
+    const codes = result.map((operation) => operation.source_item.code).join(', ');
+    if (!window.confirm(`Отменить резку? Заготовки ${codes} вернутся на склад, куски будут отменены.`)) return;
+    let undone = 0;
+    const ok = await run(async () => {
+      for (const operation of [...result].reverse()) {
+        await api(`/cuts/${operation.id}/cancel`, { method: 'POST' });
+        undone += 1;
+      }
+    }, `Резка отменена: ${codes} снова на складе`);
+    if (ok) setResult(null);
+    else if (undone > 0) setResult(result.slice(0, result.length - undone));
+  };
+
+  // A job for a material that has been deleted since cannot be repeated
+  const materialName = (id) => materials.find((m) => m.id === id)?.name;
+  const shownRecent = recent.filter((entry) => materialName(entry.material_id));
 
   const chosen = suggestion?.candidates.find((c) => c.pick_id === chosenId);
   const codeOf = (candidate) => `T-${String(candidate.pick_id).padStart(6, '0')}`;
@@ -153,6 +188,23 @@ export const CutPage = () => {
           </p>
         ) : (
           <form onSubmit={findSources}>
+            {shownRecent.length > 0 && (
+              <div className="recent">
+                <span className="muted">Недавние резки:</span>
+                {shownRecent.map((entry) => (
+                  <button
+                    key={`${entry.material_id}:${describePieces(entry.pieces)}`}
+                    type="button"
+                    className="btn btn-ghost"
+                    title="Заполнить форму и подобрать заготовку"
+                    disabled={busy}
+                    onClick={() => repeat(entry)}
+                  >
+                    {materialName(entry.material_id)}: {describePieces(entry.pieces)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="form-row">
               <label className="wide">
                 Материал
@@ -241,7 +293,7 @@ export const CutPage = () => {
             </button>
           </form>
         )}
-        <Messages error={error || loadError} />
+        <Messages error={error || loadError} notice={notice} />
       </section>
 
       {multiPlan && (
@@ -386,6 +438,16 @@ export const CutPage = () => {
             Готово: {result.length === 1 ? `${result[0].source_item.code} разрезана` : `разрезано ${result.length} шт.`}
           </h2>
           <p className="muted card-hint">Напишите новые номера на кусках, которые остаются на складе.</p>
+          <div className="result-actions">
+            {shownRecent.length > 0 && (
+              <button type="button" className="btn" disabled={busy} onClick={() => repeat(shownRecent[0])}>
+                Ещё раз так же
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-warn" disabled={busy} onClick={cancelResult}>
+              Отменить резку
+            </button>
+          </div>
           <div className="table-wrap">
             <table className="table">
               <thead>

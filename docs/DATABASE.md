@@ -116,7 +116,7 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `id` | integer | PK; из него строится номер `T-000123` |
 | `material_id` | integer | FK → `materials.id` |
 | `length_mm` | integer | больше 0 (check-ограничение) |
-| `status` | varchar(20) | `in_stock`, `reserved`, `used`, `cut`, `scrap` |
+| `status` | varchar(20) | `in_stock`, `reserved`, `used`, `cut`, `scrap`, `cancelled` (кусок отменённой резки) |
 | `location_id` | integer | FK → `locations.id`, nullable |
 | `parent_id` | integer | FK → `stock_items.id`, nullable; от какой заготовки отрезана |
 | `cut_operation_id` | integer | FK → `cut_operations.id`, nullable; какой резкой создана |
@@ -136,6 +136,8 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `kerf_loss_mm` | integer | сколько длины ушло в пропил |
 | `note` | varchar(500) | nullable |
 | `created_at` | timestamp | `now()` |
+| `cancelled_at` | timestamp | nullable; когда резку отменили (UTC) |
+| `cancelled_by_id` | integer | FK → `users.id` (`fk_cut_operations_cancelled_by_id`), nullable; кто отменил |
 
 ### `activity_log`
 
@@ -186,6 +188,7 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `c3e5b7d9f124` | Ширина реза по умолчанию 0; у существующих материалов сброшена в 0 |
 | `d4f6c8e0a235` | `stock_items.created_by_id`; кускам от прежних резок автор проставлен по автору резки |
 | `e5a7d9f1b346` | Таблица `activity_log` |
+| `1f54f4ff7266` | `cut_operations.cancelled_at`, `cancelled_by_id`; `upgrade` и `downgrade` проверены |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 

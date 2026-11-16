@@ -256,6 +256,89 @@
   flex: 0 1 200px;
 }
 
+.recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+  font-size: 0.85rem;
+}
+
+/* Stock page: one tile per material, the list opens under them */
+.stock-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.stock-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: #ddd;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.stock-tile:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.stock-tile.selected {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.stock-tile-name {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.stock-tile-count {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.list-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .multiply {
   display: flex;
   align-items: center;
@@ -431,7 +514,8 @@ details.more summary {
 }
 
 .status-used,
-.status-cut {
+.status-cut,
+.status-cancelled {
   color: #999;
 }
 
@@ -495,10 +579,36 @@ details.more summary {
   color: #777;
 }
 
-.table .actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
+.table td.actions {
+  /* A table cell, not a flex box: otherwise it drops out of the row layout */
+  width: 1%;
+  text-align: right;
+  /* Pinned to the right edge, so the buttons stay in view while a wide table scrolls */
+  position: sticky;
+  right: 0;
+  background: #1e1e1e; /* the card colour, opaque so scrolled text does not show through */
+  box-shadow: -10px 0 10px -10px rgba(0, 0, 0, 0.8);
+}
+
+.table td.actions > * + * {
+  margin-left: 0.5rem;
+}
+
+/* Long free text wraps instead of widening the table */
+.table td.note {
+  white-space: normal;
+  min-width: 8rem;
+  max-width: 16rem;
+}
+
+/* An action that undoes work: noticeable, but not the main button */
+.btn-warn {
+  color: #f0c674;
+  border-color: rgba(240, 198, 116, 0.55);
+}
+
+.btn-warn:hover {
+  background: rgba(240, 198, 116, 0.12);
 }
 
 .list {

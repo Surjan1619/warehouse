@@ -160,3 +160,91 @@ async def test_number_longer_than_the_field_allows_is_rejected(client, worker):
 
 async def test_search_requires_login(client):
     assert (await client.get("/stock-items/", params={"number": "1"})).status_code == 401
+
+
+# --- Correcting the length: PATCH /stock-items/{id} with length_mm ---
+async def test_worker_can_correct_the_length_of_a_received_piece(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6950}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["length_mm"] == 6950
+    # The new length is what cutting works with
+    response = await client.post(
+        "/cuts/", json={"source_item_id": pipe["id"], "pieces": [{"length_mm": 3000}]}, headers=headers
+    )
+    assert sorted(p["length_mm"] for p in response.json()["results"]) == [3000, 3950]
+
+
+async def test_admin_can_correct_the_length(client, admin, receive):
+    _, headers = admin
+    [pipe] = await receive(7000)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6000}, headers=headers)
+    assert response.status_code == 200, response.text
+
+
+async def test_length_of_a_reserved_piece_can_be_corrected(client, worker, receive):
+    _, headers = worker
+    order = (await client.post("/orders/", json={"number": "З-1", "customer_name": "Иванов"}, headers=headers)).json()
+    [pipe] = await receive(7000)
+    await client.post(f"/stock-items/{pipe['id']}/assign", json={"order_id": order["id"]}, headers=headers)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6500}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "reserved"
+
+
+async def test_length_of_a_cut_source_cannot_be_corrected(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    await client.post("/cuts/", json={"source_item_id": pipe["id"], "pieces": [{"length_mm": 3000}]}, headers=headers)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6000}, headers=headers)
+    assert response.status_code == 400
+    assert (await client.get(f"/stock-items/{pipe['id']}", headers=headers)).json()["length_mm"] == 7000
+
+
+async def test_length_of_a_piece_from_a_cut_cannot_be_corrected(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    cut = (
+        await client.post("/cuts/", json={"source_item_id": pipe["id"], "pieces": [{"length_mm": 3000}]}, headers=headers)
+    ).json()
+    remainder = next(p for p in cut["results"] if p["length_mm"] == 4000)
+    response = await client.patch(f"/stock-items/{remainder['id']}", json={"length_mm": 3900}, headers=headers)
+    assert response.status_code == 400
+    assert "cancel the cut" in response.json()["detail"]
+
+
+async def test_length_of_a_scrapped_piece_cannot_be_corrected(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    await client.post(f"/stock-items/{pipe['id']}/scrap", headers=headers)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6000}, headers=headers)
+    assert response.status_code == 400
+
+
+async def test_length_can_be_corrected_after_the_cut_is_cancelled(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    cut = (
+        await client.post("/cuts/", json={"source_item_id": pipe["id"], "pieces": [{"length_mm": 3000}]}, headers=headers)
+    ).json()
+    await client.post(f"/cuts/{cut['id']}/cancel", headers=headers)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": 6900}, headers=headers)
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("length", [0, -5, None, "abc"])
+async def test_bad_length_is_rejected(client, worker, receive, length):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"length_mm": length}, headers=headers)
+    assert response.status_code == 422
+    assert (await client.get(f"/stock-items/{pipe['id']}", headers=headers)).json()["length_mm"] == 7000
+
+
+async def test_note_can_still_be_changed_without_the_length(client, worker, receive):
+    _, headers = worker
+    [pipe] = await receive(7000)
+    response = await client.patch(f"/stock-items/{pipe['id']}", json={"note": "кривая"}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["note"] == "кривая" and response.json()["length_mm"] == 7000

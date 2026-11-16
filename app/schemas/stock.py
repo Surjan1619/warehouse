@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.schemas.product import LocationRead
 
-ItemStatus = Literal["in_stock", "reserved", "used", "cut", "scrap"]
+ItemStatus = Literal["in_stock", "reserved", "used", "cut", "scrap", "cancelled"]
 OrderStatus = Literal["new", "in_progress", "done", "cancelled"]
 
 
@@ -85,6 +85,8 @@ class StockItemReceive(BaseModel):
 class StockItemUpdate(BaseModel):
     location_id: int | None = None
     note: str | None = Field(None, max_length=500)
+    # Correct a length entered wrongly at receipt; refused for pieces that come from a cut
+    length_mm: int | None = Field(None, gt=0)
 
 
 class StockItemAssign(BaseModel):
@@ -113,6 +115,21 @@ class StockItemRead(BaseModel):
     created_by: UserBrief | None = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class StockItemPage(BaseModel):
+    items: list[StockItemRead]
+    # Number of items matching the filters, regardless of limit and offset
+    total: int
+
+
+class MaterialStock(BaseModel):
+    """What there is of one material: pieces, metres, shortest and longest piece."""
+    material: MaterialRead
+    count: int
+    total_length_mm: int
+    min_length_mm: int
+    max_length_mm: int
 
 
 class StockItemHistory(BaseModel):
@@ -161,7 +178,15 @@ class CutRead(BaseModel):
     created_at: datetime
     # Requested pieces plus the remainder, if any
     results: list[StockItemRead]
+    # Set when the cut was undone
+    cancelled_at: datetime | None = None
+    cancelled_by_id: int | None = None
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("cancelled_at")
+    def cancelled_at_as_utc(self, value: datetime | None) -> str | None:
+        # The database keeps UTC without an offset; state it for the browser
+        return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
 # --- Choosing what to cut from ---

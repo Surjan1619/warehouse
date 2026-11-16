@@ -126,7 +126,7 @@ class StockItem(Base):
         ForeignKey("materials.id", name="fk_stock_items_material_id"), nullable=False, index=True
     )
     length_mm: Mapped[int] = mapped_column(Integer, nullable=False)
-    # "in_stock", "reserved", "used", "cut", "scrap"
+    # "in_stock", "reserved", "used", "cut", "scrap"; "cancelled" for a piece of a cancelled cut
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="in_stock", index=True)
     location_id: Mapped[int | None] = mapped_column(
         ForeignKey("locations.id", name="fk_stock_items_location_id"), nullable=True
@@ -181,9 +181,14 @@ class CutOperation(Base):
     kerf_loss_mm: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Set when the cut is undone: the source is back in stock, the results are "cancelled"
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", name="fk_cut_operations_cancelled_by_id"), nullable=True
+    )
 
     source_item: Mapped["StockItem"] = relationship(foreign_keys=[source_item_id])
-    user: Mapped["User | None"] = relationship()
+    user: Mapped["User | None"] = relationship(foreign_keys=[user_id])
     results: Mapped[list["StockItem"]] = relationship(
         back_populates="cut_operation", foreign_keys="StockItem.cut_operation_id", order_by="StockItem.id"
     )

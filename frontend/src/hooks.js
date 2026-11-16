@@ -4,16 +4,20 @@ import { api } from './api';
 /**
  * Load a list from the API.
  * Returns the items, a function to reload them, and the load error text.
+ * With an empty `path` nothing is loaded (e.g. until the user picks what to show).
  */
 export function useList(path) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!path) return;
     api(path).then(setItems).catch((err) => setError(err.message));
   }, [path]);
 
-  const reload = async () => setItems(await api(path));
+  const reload = async () => {
+    if (path) setItems(await api(path));
+  };
   return [items, reload, error];
 }
 

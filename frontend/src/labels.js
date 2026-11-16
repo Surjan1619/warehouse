@@ -8,6 +8,7 @@ export const STATUS_LABELS = {
   used: 'Использована',
   cut: 'Разрезана',
   scrap: 'Отходы',
+  cancelled: 'Резка отменена',
 };
 
 // Actions recorded in the activity journal

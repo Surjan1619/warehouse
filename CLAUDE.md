@@ -2,7 +2,7 @@
 
 WMS (Warehouse Management System): учёт товаров на складе. Бэкенд на FastAPI + async SQLAlchemy + PostgreSQL, фронтенд на React 19 + Vite. Интерфейс и общение с пользователем — на русском.
 
-Подробности: [README.md](README.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/API.md](docs/API.md), [docs/DATABASE.md](docs/DATABASE.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
+Подробности: [README.md](README.md), [docs/USER_GUIDE.md](docs/USER_GUIDE.md) (руководство пользователя; при изменении интерфейса обновлять), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/API.md](docs/API.md), [docs/DATABASE.md](docs/DATABASE.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
 
 План работ — [docs/TODO.md](docs/TODO.md). Владелец хочет двигаться маленькими шагами: один пункт плана за раз, после каждого — проверка и отметка `[x]` в плане.
 
@@ -27,6 +27,7 @@ cd frontend
 npm install
 npm run dev
 npm run lint     # oxlint
+npm test         # тесты чистой логики фронтенда (встроенный node --test)
 npm run build
 ```
 
@@ -46,9 +47,10 @@ Compose берёт `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `JWT_SEC
 ```bash
 docker compose exec backend pytest            # весь набор
 docker compose exec backend pytest tests/test_cutting.py -k suggest
+docker compose exec frontend npm test         # тесты логики фронтенда
 ```
 
-Тесты работают на отдельной базе `<имя основной>_test` на том же сервере PostgreSQL: она создаётся при первом запуске, таблицы пересобираются из моделей, перед каждым тестом очищаются. Рабочие данные не затрагиваются. У фронтенда автотестов нет, его проверять в браузере.
+Тесты работают на отдельной базе `<имя основной>_test` на том же сервере PostgreSQL: она создаётся при первом запуске, таблицы пересобираются из моделей, перед каждым тестом очищаются. Рабочие данные не затрагиваются. У фронтенда тестами покрыта только чистая логика (файлы `*.test.js` рядом с кодом, встроенный `node --test`, без дополнительных пакетов); сами страницы проверять в браузере. Логику, которую можно проверить без браузера, выносить из компонентов в отдельные модули, как `recentCuts.js`.
 
 **Требование владельца (15.11.2026):** после каждой новой функции писать на неё тесты и прогонять весь набор; шаг не считается сделанным, пока набор не зелёный.
 
@@ -72,11 +74,13 @@ app/
 alembic/versions/          # миграции
 scripts/create_admin.py
 tests/conftest.py          # фикстуры: тестовая база, client, admin, worker, material, receive
-tests/test_*.py            # тесты: резка и подбор, заготовки, вход и права, журнал и запись в него
+tests/test_*.py            # тесты: резка и подбор, раскладка, отмена резки, заготовки, вход и права, журнал
 frontend/src/App.jsx       # маршруты, вход, главная, пользователи
 frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
 frontend/src/hooks.js      # useList, useAction — общая логика страниц
 frontend/src/labels.js     # русские названия ролей и статусов
+frontend/src/recentCuts.js # недавние резки для быстрого повтора (localStorage), с тестами
+frontend/src/pagination.js # расчёт страниц длинных списков, с тестами
 frontend/src/components/   # Layout (шапка), Messages (ошибка / успех)
 frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, JournalPage
 ```
@@ -84,7 +88,7 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, Jour
 ## Правила работы с кодом
 
 - **Слои.** Роутер принимает и валидирует запрос, вызывает функцию из `app/repo/`, возвращает Pydantic-схему. SQL-запросы в роутерах не писать. Каталог `app/service/` пуст.
-- **Два вида учёта.** Штучные товары — `products` с количеством. Всё, что режется, — `stock_items`: одна строка на физическую заготовку, длины в целых миллиметрах. Заготовки не удаляются, а меняют статус (`in_stock`, `reserved`, `used`, `cut`, `scrap`); на этом держится история происхождения.
+- **Два вида учёта.** Штучные товары — `products` с количеством. Всё, что режется, — `stock_items`: одна строка на физическую заготовку, длины в целых миллиметрах. Заготовки не удаляются, а меняют статус (`in_stock`, `reserved`, `used`, `cut`, `scrap`, `cancelled`); на этом держится история происхождения. Отмена резки (`cancel_cut`) тоже ничего не удаляет: исходник возвращается в прежний статус, куски становятся `cancelled`. Длину можно править только у принятой целой заготовки, у кусков из резки она следует из инварианта.
 - **Потери на рез по умолчанию не учитываются** (`kerf_mm = 0`, решение владельца от 15.11.2026): 7000 мм на 3000 + 3000 дают остаток ровно 1000. Учёт включается для отдельного материала полем «Ширина реза» в справочнике; логика `plan_cut` для ненулевого реза сохранена.
 - **Инвариант резки:** длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`. Любое изменение `app/repo/cutting.py` должно его сохранять. Фронтенд раскрой не считает: предпросмотр приходит от `POST /cuts/suggest`.
 - **Подбор заготовки** (`suggest_sources`) ранжирует по правилу best fit: меньше остаток — выше. Это решение владельца от 15.11.2026 («сначала самые экономные»). Подбор ищет одну заготовку под все куски; если такой нет, `plan_multi_cut` раскладывает куски по нескольким (`pack_pieces`, эвристика first fit decreasing), а `cut_many` режет их одной транзакцией.

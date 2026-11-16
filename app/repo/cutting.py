@@ -1,14 +1,15 @@
 """Cutting one stock item into several pieces."""
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.errors import DomainError, NotFoundError
-from app.models.Alchemy_models import CutOperation, Location, StockItem, User
+from app.models.Alchemy_models import CutOperation, Location, Order, StockItem, User
 from app.repo import activity
-from app.repo.stock import ITEM_LOAD, check_order_is_open, get_material
+from app.repo.stock import ACTIVE_ORDER_STATUSES, ITEM_LOAD, check_order_is_open, get_material
 
 CUT_LOAD = (
     joinedload(CutOperation.source_item).options(*ITEM_LOAD),
@@ -358,6 +359,61 @@ async def cut_many(db: AsyncSession, cuts: list[dict], user_id: int | None = Non
         raise
     await db.commit()
     return [await get_cut(db, operation_id) for operation_id in operation_ids]
+
+
+async def cancel_cut(db: AsyncSession, cut_id: int, user_id: int | None = None) -> CutOperation:
+    """
+    Undo a cut made by mistake. The source gets back the status it had before
+    the cut, and every piece of the cut becomes "cancelled". Nothing is deleted,
+    so the history keeps both the cut and its cancellation.
+
+    A cut whose piece was cut further cannot be undone until that later cut is
+    cancelled: otherwise its pieces would hang on a piece that no longer exists.
+    """
+    result = await db.execute(select(CutOperation).where(CutOperation.id == cut_id).with_for_update())
+    operation = result.scalar_one_or_none()
+    if operation is None:
+        raise NotFoundError("Cut operation not found")
+    if operation.cancelled_at is not None:
+        raise DomainError("This cut is already cancelled", status_code=409)
+
+    # Lock the source and the pieces so that nobody cuts them meanwhile
+    result = await db.execute(
+        select(StockItem)
+        .where((StockItem.id == operation.source_item_id) | (StockItem.cut_operation_id == operation.id))
+        .order_by(StockItem.id)
+        .with_for_update()
+    )
+    items = result.scalars().all()
+    source = next(item for item in items if item.id == operation.source_item_id)
+    pieces = [item for item in items if item.id != source.id]
+
+    cut_further = [piece for piece in pieces if piece.status == "cut"]
+    if cut_further:
+        codes = ", ".join(piece.code for piece in cut_further)
+        raise DomainError(f"Pieces {codes} were cut further; cancel those cuts first", status_code=409)
+
+    # Before the cut the source was either free or reserved for its order.
+    # A reservation for an order closed since then is not restored.
+    order = await db.get(Order, source.order_id) if source.order_id is not None else None
+    if order is not None and order.status in ACTIVE_ORDER_STATUSES:
+        source.status = "reserved"
+    else:
+        source.status = "in_stock"
+        source.order_id = None
+
+    for piece in pieces:
+        piece.status = "cancelled"
+        # The piece no longer exists, so it must not count towards an order
+        piece.order_id = None
+
+    if user_id is not None and await db.get(User, user_id) is None:
+        user_id = None
+    # Stored in UTC without an offset, like every other time in the database
+    operation.cancelled_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    operation.cancelled_by_id = user_id
+    await db.commit()
+    return await get_cut(db, operation.id)
 
 
 def _piece_status(piece: dict) -> str:

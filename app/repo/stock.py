@@ -177,6 +177,78 @@ async def list_items(
     return result.scalars().all()
 
 
+def _material_items(status: str | None, material_id: int | None, location_id: int | None):
+    """Conditions shared by the summary and the paged list."""
+    conditions = []
+    if status:
+        conditions.append(StockItem.status == status)
+    if material_id is not None:
+        conditions.append(StockItem.material_id == material_id)
+    if location_id is not None:
+        conditions.append(StockItem.location_id == location_id)
+    return conditions
+
+
+async def summarize_items(db: AsyncSession, status: str | None = None, location_id: int | None = None):
+    """
+    Per material: how many pieces there are, their total length, the shortest
+    and the longest. Only materials that have such pieces, by material name.
+    """
+    conditions = _material_items(status, None, location_id)
+    totals = (
+        select(
+            StockItem.material_id,
+            func.count().label("count"),
+            func.sum(StockItem.length_mm).label("total_length_mm"),
+            func.min(StockItem.length_mm).label("min_length_mm"),
+            func.max(StockItem.length_mm).label("max_length_mm"),
+        )
+        .where(*conditions)
+        .group_by(StockItem.material_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(Material, totals)
+        .join(totals, totals.c.material_id == Material.id)
+        .order_by(Material.name, Material.id)
+    )
+    return [
+        {
+            "material": row.Material,
+            "count": row.count,
+            "total_length_mm": row.total_length_mm,
+            "min_length_mm": row.min_length_mm,
+            "max_length_mm": row.max_length_mm,
+        }
+        for row in result
+    ]
+
+
+async def page_items(
+    db: AsyncSession,
+    status: str | None = None,
+    material_id: int | None = None,
+    location_id: int | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """
+    One page of stock items, longest first (equal lengths oldest first),
+    with the number of items that match the filters.
+    """
+    conditions = _material_items(status, material_id, location_id)
+    result = await db.execute(
+        select(StockItem)
+        .options(*ITEM_LOAD)
+        .where(*conditions)
+        .order_by(StockItem.length_mm.desc(), StockItem.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    total = await db.scalar(select(func.count()).select_from(StockItem).where(*conditions))
+    return {"items": result.scalars().all(), "total": total}
+
+
 async def get_item(db: AsyncSession, item_id: int) -> StockItem:
     # populate_existing: an object already in the session keeps its old
     # relationship values (expire_on_commit is off), so force a reload
@@ -244,14 +316,36 @@ async def receive_items(
     return await get_items_by_ids(db, [item.id for item in items])
 
 
+# A piece whose length may still be corrected: it has not been cut, used or written off
+EDITABLE_LENGTH_STATUSES = ("in_stock", "reserved")
+
+
 async def update_item(db: AsyncSession, item_id: int, data: dict) -> StockItem:
     item = await get_item(db, item_id)
+    if "length_mm" in data:
+        _check_length_change(item, data["length_mm"])
     if "location_id" in data:
         await _check_location(db, data["location_id"])
     for key, value in data.items():
         setattr(item, key, value)
     await db.commit()
     return await get_item(db, item_id)
+
+
+def _check_length_change(item: StockItem, length_mm: int | None) -> None:
+    """
+    Only the length of a received piece that is still whole can be corrected.
+    The length of a cut piece follows from the cut (source = pieces + kerf loss);
+    to fix it, cancel the cut, correct the source and cut again.
+    """
+    if length_mm is None:
+        raise DomainError("Length cannot be empty", status_code=422)
+    if item.parent_id is not None:
+        raise DomainError(
+            "The length of a cut piece follows from the cut; cancel the cut and correct its source instead"
+        )
+    if item.status not in EDITABLE_LENGTH_STATUSES:
+        raise DomainError(f"The length can be corrected only for a whole piece (current status: {item.status})")
 
 
 async def assign_item(db: AsyncSession, item_id: int, order_id: int) -> StockItem:

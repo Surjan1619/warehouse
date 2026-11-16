@@ -84,6 +84,19 @@ async def cut(
     )
 
 
+@router.post("/{cut_id}/cancel", response_model=CutRead)
+async def cancel_cut(
+    cut_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Undo a cut made by mistake: the source returns to its previous status and
+    the pieces become "cancelled". Refused while a piece of it is cut further.
+    """
+    return await cutting.cancel_cut(db, cut_id, user_id=current_user.id)
+
+
 @router.get("/", response_model=List[CutRead])
 async def get_cuts(source_item_id: int | None = None, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """Fetch recent cut operations, newest first."""
