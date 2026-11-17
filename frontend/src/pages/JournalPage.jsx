@@ -4,10 +4,9 @@ import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { ACTION_LABELS } from '../labels';
 import { useList } from '../hooks';
+import { describeEvent, lengthOf, subjectOf } from '../journalText';
 
 const PAGE_SIZE = 50;
-
-const mm = (value) => `${value.toLocaleString('ru-RU')} мм`;
 
 const formatTime = (iso) =>
   new Date(iso).toLocaleString('ru-RU', {
@@ -23,29 +22,6 @@ const formatTime = (iso) =>
 const startOfLocalDay = (date, addDays = 0) => {
   const [year, month, day] = date.split('-').map(Number);
   return new Date(year, month - 1, day + addDays).toISOString();
-};
-
-const describe = (event) => {
-  const code = event.stock_item?.code;
-  switch (event.action) {
-    case 'receive':
-      return event.quantity === 1
-        ? `Принята заготовка ${code || ''} — ${mm(event.length_mm)}`
-        : `Принято ${event.quantity} шт. по ${mm(event.details?.piece_length_mm ?? 0)}`;
-    case 'cut': {
-      const pieces = (event.details?.pieces_mm || []).map((l) => l.toLocaleString('ru-RU')).join(' + ');
-      const remainder = event.details?.remainder_mm;
-      return `Разрезана ${code || 'заготовка'} (${mm(event.length_mm)})${pieces ? `: ${pieces}` : ''}${
-        remainder ? `, остаток ${mm(remainder)}` : ''
-      }`;
-    }
-    case 'use':
-      return `Израсходовано ${event.quantity} шт.${code ? ` (${code})` : ''}`;
-    case 'scrap':
-      return `В отходы ${code || 'заготовка'}`;
-    default:
-      return event.action;
-  }
 };
 
 const buildQuery = (filters, offset) => {
@@ -146,7 +122,7 @@ export const JournalPage = () => {
                     <th>Работник</th>
                     <th>Действие</th>
                     <th>Что сделано</th>
-                    <th>Материал</th>
+                    <th>Материал / товар</th>
                     <th className="num">Штук</th>
                     <th className="num">Длина, мм</th>
                   </tr>
@@ -157,10 +133,10 @@ export const JournalPage = () => {
                       <td>{formatTime(event.created_at)}</td>
                       <td>{event.user?.username || '—'}</td>
                       <td><span className={`status action-${event.action}`}>{ACTION_LABELS[event.action]}</span></td>
-                      <td className="wrap">{describe(event)}</td>
-                      <td>{event.material?.name || '—'}</td>
-                      <td className="num">{event.quantity}</td>
-                      <td className="num">{event.length_mm.toLocaleString('ru-RU')}</td>
+                      <td className="wrap">{describeEvent(event)}</td>
+                      <td>{subjectOf(event)}</td>
+                      <td className="num">{event.quantity || '—'}</td>
+                      <td className="num">{lengthOf(event)}</td>
                     </tr>
                   ))}
                 </tbody>

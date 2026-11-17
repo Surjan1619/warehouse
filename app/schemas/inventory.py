@@ -1,16 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 
-class SaleProductRequest(BaseModel):
-    """Request schema for selling products."""
-    product_id: int
-    quantity: int = Field(ge=1)
 
-    model_config = ConfigDict(from_attributes=True)
-
-class InventoryResponse(BaseModel):
-    """General response schema for inventory update operations."""
-    status: str
-    product_id: int
-    new_quantity: int
-
-    model_config = ConfigDict(from_attributes=True)
+class QuantityChange(BaseModel):
+    """How many pieces of a product arrive or leave."""
+    quantity: int = Field(..., ge=1, le=100000)

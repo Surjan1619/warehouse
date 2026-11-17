@@ -29,6 +29,14 @@ materials 1 ──── * stock_items * ──── 1 orders
                         * ──── 1 users
 ```
 
+Сборка связывает резки и движения штучных товаров, сделанные для одного изделия:
+
+```
+assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
+           1 ──── * movements           (movements.assembly_id)
+           * ──── 1 users
+```
+
 `users` связана с `cut_operations` (кто резал) и `stock_items` (кто создал запись).
 
 ## Таблицы
@@ -77,11 +85,26 @@ materials 1 ──── * stock_items * ──── 1 orders
 |---|---|---|
 | `id` | integer | PK |
 | `product_id` | integer | FK → `products.id`, обязателен |
-| `change_type` | varchar(50) | `cut_source`, `cut_result`, `sale`, `purchase` |
+| `change_type` | varchar(50) | `receive` (приход), `issue` (расход); в старых записях могут быть `sale`, `purchase` |
 | `quantity_changed` | integer | со знаком: расход отрицательный |
 | `created_at` | timestamp | `now()` на стороне БД |
+| `user_id` | integer | FK → `users.id` (`fk_movements_user_id`), nullable; кто изменил количество |
+| `assembly_id` | integer | FK → `assemblies.id` (`fk_movements_assembly_id`), nullable, индекс; для какой сборки выдан товар |
 
-У внешнего ключа `movements.product_id` нет каскада, поэтому товар с историей движений удалить не получится: БД вернёт ошибку целостности.
+У внешнего ключа `movements.product_id` нет каскада. Товар с историей движений `delete_product` не удаляет и отвечает 409, чтобы история прихода и расхода не пропала.
+
+### `assemblies`
+
+Сборка — всё, что взято со склада для одного изделия (например, ворот): резки и выданные штучные товары. Создаётся одной транзакцией вместе с ними (`repo/assembly.py`).
+
+| Колонка | Тип | Примечание |
+|---|---|---|
+| `id` | integer | PK |
+| `name` | varchar(150) | nullable; что собирали |
+| `note` | varchar(500) | nullable |
+| `client_key` | varchar(64) | уникальный; ключ черновика из браузера, повторная отправка того же черновика возвращает уже сохранённую сборку |
+| `user_id` | integer | FK → `users.id` (`fk_assemblies_user_id`), nullable, индекс; кто собирал |
+| `created_at` | timestamp | `now()`, индекс |
 
 ### `materials`
 
@@ -138,6 +161,7 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `created_at` | timestamp | `now()` |
 | `cancelled_at` | timestamp | nullable; когда резку отменили (UTC) |
 | `cancelled_by_id` | integer | FK → `users.id` (`fk_cut_operations_cancelled_by_id`), nullable; кто отменил |
+| `assembly_id` | integer | FK → `assemblies.id` (`fk_cut_operations_assembly_id`), nullable, индекс; для какой сборки сделана резка |
 
 ### `activity_log`
 
@@ -148,10 +172,11 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `id` | integer | PK |
 | `created_at` | timestamp | `now()`, индекс |
 | `user_id` | integer | FK → `users.id`, nullable; кто сделал |
-| `action` | varchar(30) | `receive` (приход), `cut` (резка), `use` (израсходовано), `scrap` (отходы) |
+| `action` | varchar(30) | `receive` (приход заготовок), `cut` (резка), `use` (израсходовано), `scrap` (отходы), `assemble` (сборка), `product_receive` (приход товара), `product_issue` (расход товара) |
 | `material_id` | integer | FK → `materials.id`, nullable |
 | `stock_item_id` | integer | FK → `stock_items.id`, nullable; заготовка, если действие касается одной |
 | `cut_operation_id` | integer | FK → `cut_operations.id`, nullable |
+| `product_id` | integer | FK → `products.id` (`fk_activity_log_product_id`, `ON DELETE SET NULL`), nullable, индекс; штучный товар. После удаления товара запись остаётся, название хранится в `details` |
 | `quantity` | integer | сколько штук, по умолчанию 1 |
 | `length_mm` | integer | их суммарная длина, по умолчанию 0 |
 | `details` | JSONB | nullable; дополнительные сведения |
@@ -164,10 +189,13 @@ materials 1 ──── * stock_items * ──── 1 orders
 | `cut` | резка | 1 | длина разрезанной заготовки | `stock_item_id` — что резали; `details`: длины кусков и остаток |
 | `use` | куски помечены использованными: при резке, кнопкой `use`, при закрытии заказа | число кусков | их суммарная длина | при резке одна запись на все использованные куски |
 | `scrap` | остаток ушёл в отходы при резке или заготовка списана вручную | 1 | длина | `stock_item_id` — что списано |
+| `product_receive` | товар пополнен или заведён с количеством; одна запись на действие | сколько штук пришло | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after` (сколько стало), `new` у нового товара |
+| `product_issue` | товар выдан со склада: «Расход → Товары» или в сборке | сколько штук выдано | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after`, `assembly_id` если выдано в сборке |
+| `assemble` | сборка завершена; одна запись на сборку | 0 | 0 | `details`: `assembly_id`, `name`, `cut_operation_ids`, `products` (id и количество). Нули — чтобы не считать дважды: куски уже учтены записями `cut` и `use` |
 
 Записи резки (`cut`, `use`, `scrap`) связаны общим `cut_operation_id`. Отчёты строятся как суммы `quantity` и `length_mm` по этой таблице.
 
-Не записываются: резерв и снятие резерва, перемещение, удаление справочников и товаров, действия со штучными товарами. Журнал ведётся с 15.11.2026; более ранние действия в нём отсутствуют.
+Не записываются: резерв и снятие резерва, перемещение, удаление справочников и товаров. Журнал ведётся с 15.11.2026; более ранние действия в нём отсутствуют.
 
 Для любой резки выполняется равенство: длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`.
 
@@ -189,6 +217,9 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `d4f6c8e0a235` | `stock_items.created_by_id`; кускам от прежних резок автор проставлен по автору резки |
 | `e5a7d9f1b346` | Таблица `activity_log` |
 | `1f54f4ff7266` | `cut_operations.cancelled_at`, `cancelled_by_id`; `upgrade` и `downgrade` проверены |
+| `3e553887126a` | `movements.user_id`; `upgrade` и `downgrade` проверены |
+| `22cd031e4c95` | Таблица `assemblies`, `cut_operations.assembly_id`, `movements.assembly_id`; `upgrade` и `downgrade` проверены |
+| `0ba50d8723d9` | `activity_log.product_id`; все прежние строки `movements` перенесены в журнал как `product_receive` / `product_issue` (с автором и временем, `details.from_movements = true`). `downgrade` удаляет эти записи; проверено дважды подряд, без задвоения |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 

@@ -1,9 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
-from app.models.Alchemy_models import User, Product, ProductType, Location
+from app.models.Alchemy_models import User, Product, ProductType, Location, Movement
 from app.core.errors import DomainError, NotFoundError
 from app.core.security import hash_password
+from app.repo import activity, inventory
 
 async def get_user_by_username(db: AsyncSession, username: str):
     """Retrieve a single user by username, or None if not found."""
@@ -82,8 +83,8 @@ async def create_product_type(db: AsyncSession, name: str, required_attributes: 
     await db.refresh(product_type)
     return product_type
 
-async def create_product(db: AsyncSession, name: str, quantity: int = 0, product_type_id: int = None, length: float = None, width: float = None, thickness: float = None, shape: str = None, weight: float = None, location_id: int = None):
-    """Persist a new product to the database."""
+async def create_product(db: AsyncSession, name: str, quantity: int = 0, product_type_id: int = None, length: float = None, width: float = None, thickness: float = None, shape: str = None, weight: float = None, location_id: int = None, user_id: int | None = None):
+    """Persist a new product. A starting quantity is journalled as goods received."""
     product = Product(
         name=name, 
         quantity=quantity, 
@@ -96,6 +97,12 @@ async def create_product(db: AsyncSession, name: str, quantity: int = 0, product
         weight=weight
     )
     db.add(product)
+    if quantity:
+        await db.flush()  # assigns product.id
+        if user_id is not None and await db.get(User, user_id) is None:
+            user_id = None
+        type_name = await inventory.type_name_of(db, product)
+        inventory.add_product_event(db, product, activity.PRODUCT_RECEIVE, quantity, user_id, type_name, new=True)
     await db.commit()
     # Re-fetch the product with the relationship loaded to satisfy the Pydantic schema
     result = await db.execute(
@@ -111,10 +118,16 @@ async def get_all_products(db: AsyncSession):
     return result.scalars().unique().all()
 
 async def delete_product(db: AsyncSession, product_id: int):
-    """Delete a product by ID."""
+    """
+    Delete a product by ID. A product that was restocked or issued keeps its
+    history in `movements`, so it cannot be deleted.
+    """
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if product:
+        moved = await db.scalar(select(func.count()).select_from(Movement).where(Movement.product_id == product_id))
+        if moved:
+            raise DomainError("Product has stock movements and cannot be deleted", status_code=409)
         await db.delete(product)
         await db.commit()
         return True

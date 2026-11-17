@@ -5,13 +5,26 @@ from pydantic import BaseModel, ConfigDict, field_serializer
 
 from app.schemas.stock import MaterialRead, UserBrief
 
-Action = Literal["receive", "cut", "use", "scrap"]
+Action = Literal["receive", "cut", "use", "scrap", "assemble", "product_receive", "product_issue"]
 
 
 class StockItemBrief(BaseModel):
     id: int
     code: str
     length_mm: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductTypeBrief(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductBrief(BaseModel):
+    id: int
+    name: str | None = None
+    product_type: ProductTypeBrief | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -23,6 +36,8 @@ class ActivityEventRead(BaseModel):
     material: MaterialRead | None = None
     stock_item: StockItemBrief | None = None
     cut_operation_id: int | None = None
+    # Set for piece goods; None after the product was deleted (its name stays in details)
+    product: ProductBrief | None = None
     quantity: int
     length_mm: int
     details: dict | None = None

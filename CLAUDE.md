@@ -63,26 +63,32 @@ app/
   middleware/auth.py       # проверка Bearer-токена на всех путях, кроме публичных
   api/deps.py              # get_current_user (подключён ко всем роутерам), require_admin
   core/errors.py           # DomainError, NotFoundError — ошибки бизнес-правил
-  api/routers/             # auth, users, activity, products, locations, materials, orders, stock_items, cuts
+  api/routers/             # auth, users, activity, products, locations, materials, orders, stock_items, cuts, assemblies
   repo/crud.py             # запросы к БД: users, products, product_types, locations
   repo/stock.py            # материалы, заказы, заготовки (поштучный учёт)
   repo/cutting.py          # резка: plan_cut, cut_item, cut_many, подбор (suggest_sources), раскладка (pack_pieces)
   repo/activity.py         # журнал действий: add_event (без commit), list_events
-  repo/inventory.py        # sell_product для штучных товаров (без HTTP-эндпоинта)
+  repo/inventory.py        # приход и расход штучных товаров (receive_product, issue_product) с записью в movements
+  repo/assembly.py         # сборка: предпросмотр (plan_assembly) и завершение одной транзакцией (create_assembly)
   models/Alchemy_models.py # все ORM-модели и Base
-  schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory
+  schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory, assembly
 alembic/versions/          # миграции
 scripts/create_admin.py
 tests/conftest.py          # фикстуры: тестовая база, client, admin, worker, material, receive
-tests/test_*.py            # тесты: резка и подбор, раскладка, отмена резки, заготовки, вход и права, журнал
+tests/test_*.py            # тесты: резка и подбор, раскладка, отмена резки, заготовки, товары, сборка, вход и права, журнал
 frontend/src/App.jsx       # маршруты, вход, главная, пользователи
 frontend/src/api.js        # вызовы API, сессия (токен и пользователь в localStorage)
 frontend/src/hooks.js      # useList, useAction — общая логика страниц
 frontend/src/labels.js     # русские названия ролей и статусов
 frontend/src/recentCuts.js # недавние резки для быстрого повтора (localStorage), с тестами
 frontend/src/pagination.js # расчёт страниц длинных списков, с тестами
-frontend/src/components/   # Layout (шапка), Messages (ошибка / успех)
-frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, JournalPage
+frontend/src/navigation.js # разделы сайта и их страницы, с тестами
+frontend/src/journalText.js # текст записей журнала (резки, товары, сборки), с тестами
+frontend/src/productOptions.js # подпись товара в списках (название · тип) и группировка по типу, с тестами
+frontend/src/assemblyDraft.js # черновик сборки (localStorage), запросы к /assemblies, с тестами
+frontend/src/components/   # Layout (разделы и вкладки), Messages (ошибка / успех)
+frontend/src/pages/        # остатки: StockPage, ProductsPage; приход: ReceiveStockPage, ReceiveProductsPage;
+                           # расход: AssemblyPage, CutPage, IssuePage; CatalogPage; админ: ProductTypesPage, JournalPage
 ```
 
 ## Правила работы с кодом
@@ -93,6 +99,7 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, Jour
 - **Инвариант резки:** длина исходной заготовки = сумма длин результатов + `kerf_loss_mm`. Любое изменение `app/repo/cutting.py` должно его сохранять. Фронтенд раскрой не считает: предпросмотр приходит от `POST /cuts/suggest`.
 - **Подбор заготовки** (`suggest_sources`) ранжирует по правилу best fit: меньше остаток — выше. Это решение владельца от 15.11.2026 («сначала самые экономные»). Подбор ищет одну заготовку под все куски; если такой нет, `plan_multi_cut` раскладывает куски по нескольким (`pack_pieces`, эвристика first fit decreasing), а `cut_many` режет их одной транзакцией.
 - **Резка без commit.** Логика резки живёт в `_apply_cut`, который не делает commit; `cut_item` и `cut_many` — обёртки с commit. Новый код, режущий заготовки, должен вызывать `_apply_cut` внутри своей транзакции.
+- **Сборка.** Всё, что берётся для одного изделия, — `assemblies`; резки и движения товаров ссылаются на неё через `assembly_id`. Завершение (`create_assembly`) режет через `_apply_cut` и списывает через `inventory.apply_quantity_change` (оба без commit) в одной транзакции; повторная отправка с тем же `client_key` возвращает уже сохранённую сборку. Режутся только заготовки `in_stock`, как в предпросмотре. Отмены сборки целиком пока нет.
 - **Журнал действий.** Запись в `activity_log` добавлять через `activity.add_event` в той же транзакции, что и само действие, до его `commit`.  Отдельный commit для журнала не делать: запись должна откатываться вместе с действием. Новое действие — новая константа в `repo/activity.py` и строка в таблице в `docs/DATABASE.md`. Удаления в журнал не пишутся (решение владельца от 15.11.2026).
 - **Время.** В базе время хранится в UTC без смещения, владелец работает в поясе UTC+4. Схема, отдающая время на сайт, должна добавлять `+00:00` (как `ActivityEventRead`), а фильтры по датам — приводиться к UTC (`_to_db_time` в `routers/activity.py`). Иначе страница покажет время со сдвигом на 4 часа.
 - **Ошибки в `repo`.** Бросать `DomainError` / `NotFoundError` из `app/core/errors.py`, а не `HTTPException`; обработчик в `main.py` превращает их в ответ.
@@ -105,7 +112,7 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, Jour
 - **Пользователей не удалять**, а отключать через `is_active`: на них ссылаются `cut_operations.user_id` и `stock_items.created_by_id`.
 - **Автор действия.** Эндпоинт, который что-то создаёт, берёт пользователя через `Depends(get_current_user)` и передаёт его `id` в `repo`. У заготовки автор — `created_by_id`: кто принял её на склад или сделал резку, из которой она получилась.
 - **БД — только PostgreSQL**: используется `JSONB` и драйвер `asyncpg`.
-- **Новая страница фронтенда** — отдельный файл в `frontend/src/pages/`, маршрут в `App.jsx`, ссылка в `components/Layout.jsx`. Списки загружать через `useList`, действия выполнять через `useAction`, как в `pages/ProductsPage.jsx`. Файл с компонентами не должен экспортировать ничего, кроме компонентов (правило oxlint), константы класть в `labels.js`.
+- **Новая страница фронтенда** — отдельный файл в `frontend/src/pages/`, маршрут в `App.jsx`, запись в нужный раздел в `navigation.js` (по нему строятся шапка, вкладки и главная). Списки загружать через `useList`, действия выполнять через `useAction`, как в `pages/ProductsPage.jsx`. Файл с компонентами не должен экспортировать ничего, кроме компонентов (правило oxlint), константы класть в `labels.js`.
 - **Фронтенд.** Запросы делать через `api()` из `frontend/src/api.js`, а не через `fetch` напрямую: она добавляет токен и обрабатывает 401. Адрес API задаётся в `VITE_API_URL` (по умолчанию `http://localhost:8000`). CORS на бэкенде разрешает только `http://localhost:5173`.
 - **Секреты.** `.env` в git не попадает. Значения из него не выводить и не коммитить.
 
@@ -118,4 +125,4 @@ frontend/src/pages/        # StockPage, CutPage, ProductsPage, CatalogPage, Jour
 - Во фронтенде есть приход заготовок, резка, товары и справочники. Заказов, резерва и истории заготовки там нет: для них есть только API. Привязку кусков к заказу при резке владелец отложил на потом (решение от 15.11.2026).
 - `AuthMiddleware` должен добавляться в `main.py` раньше `CORSMiddleware` и возвращать `JSONResponse`, а не бросать `HTTPException`: исключение из middleware превращается в 500.
 - Открытой регистрации нет: первого администратора создаёт `scripts/create_admin.py`, остальных — администратор.
-- Работник (`worker`) пока может всё, кроме управления пользователями.
+- Работник (`worker`) пока может всё, кроме управления пользователями, журнала и типов товаров (создание и удаление типов — `require_admin`, решение владельца от 16.11.2026).

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.api.routers import activity, auth, cuts, locations, materials, orders, products, stock_items, users
+from app.api.routers import activity, assemblies, auth, cuts, locations, materials, orders, products, stock_items, users
 from app.core.errors import DomainError
 from app.api.deps import get_current_user
 from app.core.db import get_db
@@ -41,6 +41,7 @@ app.include_router(materials.router, prefix="/materials", tags=["materials"], de
 app.include_router(orders.router, prefix="/orders", tags=["orders"], dependencies=authenticated)
 app.include_router(stock_items.router, prefix="/stock-items", tags=["stock items"], dependencies=authenticated)
 app.include_router(cuts.router, prefix="/cuts", tags=["cuts"], dependencies=authenticated)
+app.include_router(assemblies.router, prefix="/assemblies", tags=["assemblies"], dependencies=authenticated)
 
 
 @app.exception_handler(DomainError)

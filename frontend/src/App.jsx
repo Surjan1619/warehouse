@@ -6,9 +6,15 @@ import { Layout } from './components/Layout';
 import { ROLE_LABELS } from './labels';
 import { ProductsPage } from './pages/ProductsPage';
 import { StockPage } from './pages/StockPage';
+import { AssemblyPage } from './pages/AssemblyPage';
 import { CutPage } from './pages/CutPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { JournalPage } from './pages/JournalPage';
+import { ReceiveStockPage } from './pages/ReceiveStockPage';
+import { ReceiveProductsPage } from './pages/ReceiveProductsPage';
+import { IssuePage } from './pages/IssuePage';
+import { ProductTypesPage } from './pages/ProductTypesPage';
+import { visibleSections } from './navigation';
 
 // 1. Защита маршрутов: нужен вход, а для adminOnly — ещё и роль администратора.
 // Это только удобство интерфейса: права проверяет сервер.
@@ -70,41 +76,26 @@ const LoginPage = () => {
   );
 };
 
-// 3. Главная страница
+// 3. Главная страница: все разделы с их страницами
 const HomePage = () => {
   const user = getUser();
   return (
     <Layout title="Главная">
-      <div className="tiles">
-        <Link to="/stock" className="tile">
-          <h2>Заготовки</h2>
-          <p>Приход труб и профилей, остатки по длинам</p>
-        </Link>
-        <Link to="/cut" className="tile">
-          <h2>Резка</h2>
-          <p>Разрезать заготовку, записать куски и остаток</p>
-        </Link>
-        <Link to="/products" className="tile">
-          <h2>Товары</h2>
-          <p>Штучные товары: добавление и остатки</p>
-        </Link>
-        <Link to="/catalog" className="tile">
-          <h2>Справочники</h2>
-          <p>Материалы, типы товаров, места хранения</p>
-        </Link>
-        {isAdmin(user) && (
-          <Link to="/journal" className="tile">
-            <h2>Журнал</h2>
-            <p>Кто, что и когда делал на складе</p>
-          </Link>
-        )}
-        {isAdmin(user) && (
-          <Link to="/admin" className="tile">
-            <h2>Пользователи</h2>
-            <p>Создание учётных записей работников</p>
-          </Link>
-        )}
-      </div>
+      {visibleSections(isAdmin(user)).map((section) => (
+        <section key={section.key} className="home-section">
+          <h2>
+            {section.title} <span className="muted">· {section.hint}</span>
+          </h2>
+          <div className="tiles">
+            {section.pages.map((page) => (
+              <Link key={page.path} to={page.path} className="tile">
+                <h3>{page.title}</h3>
+                <p>{page.hint}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </Layout>
   );
 };
@@ -253,9 +244,14 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/stock" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
+        <Route path="/assembly" element={<ProtectedRoute><AssemblyPage /></ProtectedRoute>} />
         <Route path="/cut" element={<ProtectedRoute><CutPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
+        <Route path="/receive" element={<ProtectedRoute><ReceiveStockPage /></ProtectedRoute>} />
+        <Route path="/receive/products" element={<ProtectedRoute><ReceiveProductsPage /></ProtectedRoute>} />
+        <Route path="/issue" element={<ProtectedRoute><IssuePage /></ProtectedRoute>} />
+        <Route path="/admin/types" element={<ProtectedRoute adminOnly><ProductTypesPage /></ProtectedRoute>} />
         <Route path="/journal" element={<ProtectedRoute adminOnly><JournalPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/home" replace />} />

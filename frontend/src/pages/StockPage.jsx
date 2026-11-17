@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { STATUS_LABELS } from '../labels';
-import { useAction, useList, numberOrNull, textOrNull } from '../hooks';
+import { useAction, useList } from '../hooks';
 import { PAGE_SIZE, metres, pageCount, pageQuery, pageRange } from '../pagination';
-
-const emptyReceive = { material_id: '', length_mm: '', count: '1', location_id: '', note: '' };
 
 const materialTitle = (m) => [m.name, m.color, m.sku && `арт. ${m.sku}`].filter(Boolean).join(' · ');
 
@@ -16,14 +14,16 @@ const lengthSpan = (row) =>
     ? `все по ${row.min_length_mm.toLocaleString('ru-RU')} мм`
     : `от ${row.min_length_mm.toLocaleString('ru-RU')} до ${row.max_length_mm.toLocaleString('ru-RU')} мм`;
 
-// Заготовки: каждая труба или профиль — отдельная запись со своей длиной.
+// Остатки заготовок: каждая труба или профиль — отдельная запись со своей длиной.
 // Список не выводится целиком: сначала плитки по материалам, по щелчку —
-// заготовки этого материала постранично.
+// заготовки этого материала постранично. Приход — на странице /receive.
 export const StockPage = () => {
+  const [params] = useSearchParams();
   const [status, setStatus] = useState('in_stock');
   const [search, setSearch] = useState('');
-  // The material whose pieces are listed; none until a tile is clicked
-  const [materialId, setMaterialId] = useState(null);
+  // The material whose pieces are listed: none until a tile is clicked, or the
+  // one passed by "Посмотреть в остатках" after a receipt
+  const [materialId, setMaterialId] = useState(() => Number(params.get('material')) || null);
   const [page, setPage] = useState(0);
   // A number is looked up as soon as it has a digit; the status filter is
   // ignored then, because the piece may already be cut or used
@@ -42,14 +42,8 @@ export const StockPage = () => {
   const loadError = summaryError || foundError || pageError;
   const reload = () => Promise.all([reloadSummary(), reloadFound(), reloadPage()]);
   const [materials] = useList('/materials/');
-  const [locations] = useList('/locations/');
-  const [form, setForm] = useState(emptyReceive);
-  const { error, busy, run } = useAction();
-  // Actions on rows of the list have their own messages, shown under the list
+  // Actions on rows of the list: cancel a cut, correct a length
   const rowAction = useAction();
-  // Shown after a successful receipt so the numbers can be written on the pieces
-  const [received, setReceived] = useState('');
-  const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const chooseStatus = (value) => {
     setStatus(value);
@@ -60,36 +54,6 @@ export const StockPage = () => {
   const chooseMaterial = (id) => {
     setMaterialId(id === materialId ? null : id);
     setPage(0);
-  };
-
-  const receive = async (e) => {
-    e.preventDefault();
-    setReceived('');
-    const body = {
-      material_id: Number(form.material_id),
-      length_mm: Number(form.length_mm),
-      count: Number(form.count),
-      location_id: numberOrNull(form.location_id),
-      note: textOrNull(form.note),
-    };
-    let created = [];
-    const ok = await run(
-      async () => {
-        created = await api('/stock-items/', { method: 'POST', body });
-      },
-      '',
-    );
-    if (!ok) return;
-
-    const codes = created.map((item) => item.code);
-    const range = codes.length > 1 ? `${codes[0]} … ${codes[codes.length - 1]}` : codes[0];
-    setReceived(`Добавлено заготовок: ${codes.length}. Номера: ${range}`);
-    // Keep material and location: deliveries are entered in series
-    setForm({ ...emptyReceive, material_id: form.material_id, location_id: form.location_id });
-    // Open the material just received, so the new pieces are in view
-    setMaterialId(body.material_id);
-    setPage(0);
-    await reload();
   };
 
   // Undo the cut this piece was cut by: it returns to stock, its pieces are cancelled
@@ -130,55 +94,12 @@ export const StockPage = () => {
     summary.find((row) => row.material.id === materialId)?.material || materials.find((m) => m.id === materialId);
 
   return (
-    <Layout title="Заготовки">
-      <section className="card">
-        <h2>Приход</h2>
-        {materials.length === 0 ? (
-          <p className="muted">
-            Сначала добавьте материал в <Link to="/catalog">справочниках</Link>: заготовки заводятся по материалу.
-          </p>
-        ) : (
-          <>
-            <p className="muted card-hint">
-              Каждая заготовка получает свой номер. Напишите его на трубе — по нему она находится в системе.
-            </p>
-            <form className="form-row" onSubmit={receive}>
-              <label className="wide">
-                Материал
-                <select value={form.material_id} onChange={set('material_id')} required>
-                  <option value="">— выберите —</option>
-                  {materials.map((m) => <option key={m.id} value={m.id}>{materialTitle(m)}</option>)}
-                </select>
-              </label>
-              <label>
-                Длина, мм
-                <input type="number" value={form.length_mm} onChange={set('length_mm')} min={1} step={1} required />
-              </label>
-              <label>
-                Количество, шт.
-                <input type="number" value={form.count} onChange={set('count')} min={1} max={500} step={1} required />
-              </label>
-              <label>
-                Место хранения
-                <select value={form.location_id} onChange={set('location_id')}>
-                  <option value="">— не указано —</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </label>
-              <label className="wide">
-                Примечание
-                <input type="text" value={form.note} onChange={set('note')} maxLength={500} />
-              </label>
-              <button className="btn" type="submit" disabled={busy}>Принять на склад</button>
-            </form>
-          </>
-        )}
-        <Messages error={error || loadError} notice={received} />
-      </section>
-
+    <Layout title="Остатки заготовок">
       <section className="card">
         <div className="card-head">
-          <h2>Заготовки</h2>
+          <p className="muted card-hint">
+            Принять новые трубы — в разделе <Link to="/receive">«Приход»</Link>.
+          </p>
           <label className="inline-filter">
             Номер
             <input
@@ -325,7 +246,7 @@ export const StockPage = () => {
             )}
           </>
         )}
-        <Messages error={rowAction.error} notice={rowAction.notice} />
+        <Messages error={rowAction.error || loadError} notice={rowAction.notice} />
       </section>
     </Layout>
   );

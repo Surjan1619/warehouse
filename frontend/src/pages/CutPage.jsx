@@ -183,8 +183,8 @@ export const CutPage = () => {
         <h2>1. Что нужно получить</h2>
         {materials.length === 0 && !loadError ? (
           <p className="muted">
-            Сначала добавьте материал в <Link to="/catalog">справочниках</Link> и примите заготовки на странице{' '}
-            <Link to="/stock">«Заготовки»</Link>.
+            Сначала добавьте материал в <Link to="/catalog">справочниках</Link> и примите заготовки в разделе{' '}
+            <Link to="/receive">«Приход»</Link>.
           </p>
         ) : (
           <form onSubmit={findSources}>

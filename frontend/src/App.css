@@ -112,8 +112,80 @@
 
 .topbar nav {
   display: flex;
-  gap: 1.2rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   flex: 1;
+}
+
+.topbar nav a {
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+}
+
+/* The section the current page belongs to */
+.topbar nav a.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Pages of the current section, under the top bar */
+.subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.subnav a {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  color: #aaa;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.subnav a:hover {
+  color: #fff;
+}
+
+.subnav a.active {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Home page: one block per section */
+.home-section {
+  margin-bottom: 2rem;
+}
+
+.home-section h2 {
+  margin-bottom: 0.8rem;
+  font-size: 1.1rem;
+}
+
+.home-section h2 .muted {
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.tile h3 {
+  margin: 0 0 0.4rem;
+  color: #fff;
+}
+
+.tile p {
+  margin: 0;
+}
+
+/* Numbers just given to received pieces */
+.codes {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 1.3rem;
+  color: #fff;
+  margin: 0.4rem 0 1rem;
 }
 
 .topbar-user {
@@ -539,6 +611,21 @@ details.more summary {
   border-color: rgba(255, 128, 128, 0.4);
 }
 
+.action-product_receive {
+  color: #8fd19e;
+  border-color: rgba(143, 209, 158, 0.4);
+}
+
+.action-product_issue {
+  color: #f0a86e;
+  border-color: rgba(240, 168, 110, 0.4);
+}
+
+.action-assemble {
+  color: #c9a7ff;
+  border-color: rgba(201, 167, 255, 0.4);
+}
+
 .table td.wrap {
   white-space: normal;
   min-width: 220px;
@@ -627,4 +714,161 @@ details.more summary {
 .notice {
   margin-top: 1rem;
   color: #8fd19e;
+}
+
+/* --- Сборка --- */
+.assembly-head {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.assembly-head-fields {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.assembly-head-fields label,
+.assembly-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #aaa;
+  min-width: 12rem;
+}
+
+.assembly-head-fields label.wide {
+  flex: 1;
+}
+
+.assembly-head input,
+.assembly-form input,
+.assembly-form select,
+.assembly-lines input,
+.assembly-lines select {
+  padding: 0.55rem 0.7rem;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  color: #eee;
+  font-size: 0.95rem;
+}
+
+.assembly-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.assembly-side {
+  display: grid;
+  gap: 1.2rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.assembly-side .card,
+.assembly-grid > .card {
+  margin: 0;
+}
+
+.assembly-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.assembly-form-row {
+  display: grid;
+  grid-template-columns: 1fr 6rem;
+  gap: 0.8rem;
+}
+
+.assembly-form-row label {
+  min-width: 0;
+}
+
+.assembly-lines input {
+  width: 7rem;
+  text-align: right;
+}
+
+.assembly-lines input.narrow {
+  width: 4.5rem;
+}
+
+.assembly-lines input[aria-invalid='true'],
+.assembly-form input[aria-invalid='true'] {
+  border-color: #ff8080;
+}
+
+.table tr.has-error td {
+  background: rgba(255, 128, 128, 0.06);
+}
+
+.field-error {
+  margin: 0.3rem 0 0;
+  color: #ff8080;
+  font-size: 0.85rem;
+}
+
+.field-hint {
+  margin: -0.4rem 0 0;
+  font-size: 0.85rem;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.assembly-summary {
+  margin-top: 1.2rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid #4a6a4f;
+  border-radius: 10px;
+  background: rgba(143, 209, 158, 0.06);
+}
+
+.assembly-summary h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.assembly-summary ul {
+  margin: 0 0 0.8rem;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.assembly-summary .warn {
+  color: #f0c674;
+}
+
+.assembly-done {
+  border: 1px solid #4a6a4f;
+}
+
+.assembly-done-cut {
+  margin: 0.4rem 0;
+  line-height: 1.9;
+}
+
+.assembly-piece {
+  margin-right: 0.9rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .assembly-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assembly-side {
+    position: static;
+  }
 }

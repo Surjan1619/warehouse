@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.Alchemy_models import ActivityEvent
+from app.models.Alchemy_models import ActivityEvent, Product
 
 # Pieces were put into stock
 RECEIVE = "receive"
@@ -21,13 +21,20 @@ CUT = "cut"
 USE = "use"
 # Pieces were written off as scrap
 SCRAP = "scrap"
+# An assembly was finished; details list its cuts and the goods taken out for it
+ASSEMBLE = "assemble"
+# Piece goods came in (restock or a new product with a quantity); quantity is the number of pieces
+PRODUCT_RECEIVE = "product_receive"
+# Piece goods were taken out of stock, on their own or for an assembly
+PRODUCT_ISSUE = "product_issue"
 
-ACTIONS = frozenset({RECEIVE, CUT, USE, SCRAP})
+ACTIONS = frozenset({RECEIVE, CUT, USE, SCRAP, ASSEMBLE, PRODUCT_RECEIVE, PRODUCT_ISSUE})
 
 EVENT_LOAD = (
     joinedload(ActivityEvent.user),
     joinedload(ActivityEvent.material),
     joinedload(ActivityEvent.stock_item),
+    joinedload(ActivityEvent.product).joinedload(Product.product_type),
 )
 
 
@@ -39,6 +46,7 @@ def add_event(
     material_id: int | None = None,
     stock_item_id: int | None = None,
     cut_operation_id: int | None = None,
+    product_id: int | None = None,
     quantity: int = 1,
     length_mm: int = 0,
     details: dict | None = None,
@@ -60,6 +68,7 @@ def add_event(
         material_id=material_id,
         stock_item_id=stock_item_id,
         cut_operation_id=cut_operation_id,
+        product_id=product_id,
         quantity=quantity,
         length_mm=length_mm,
         details=details,

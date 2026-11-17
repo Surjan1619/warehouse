@@ -227,6 +227,7 @@ async def _apply_cut(
     scrap_remainder: bool = False,
     note: str | None = None,
     user_id: int | None = None,
+    assembly_id: int | None = None,
 ) -> int:
     """
     Cut a stock item inside the caller's transaction, without committing.
@@ -267,6 +268,7 @@ async def _apply_cut(
         kerf_mm=kerf,
         kerf_loss_mm=plan.kerf_loss_mm,
         note=note,
+        assembly_id=assembly_id,
     )
     db.add(operation)
     await db.flush()  # assigns operation.id
