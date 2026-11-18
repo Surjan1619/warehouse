@@ -83,11 +83,12 @@ async def create_product_type(db: AsyncSession, name: str, required_attributes: 
     await db.refresh(product_type)
     return product_type
 
-async def create_product(db: AsyncSession, name: str, quantity: int = 0, product_type_id: int = None, length: float = None, width: float = None, thickness: float = None, shape: str = None, weight: float = None, location_id: int = None, user_id: int | None = None):
+async def create_product(db: AsyncSession, name: str, quantity: int = 0, product_type_id: int = None, length: float = None, width: float = None, thickness: float = None, shape: str = None, weight: float = None, location_id: int = None, user_id: int | None = None, unit: str = "шт"):
     """Persist a new product. A starting quantity is journalled as goods received."""
     product = Product(
-        name=name, 
-        quantity=quantity, 
+        name=name,
+        quantity=quantity,
+        unit=unit,
         product_type_id=product_type_id,
         location_id=location_id,
         length=length,

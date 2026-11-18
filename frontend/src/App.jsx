@@ -8,10 +8,12 @@ import { ProductsPage } from './pages/ProductsPage';
 import { StockPage } from './pages/StockPage';
 import { AssemblyPage } from './pages/AssemblyPage';
 import { CutPage } from './pages/CutPage';
+import { ClearDatabasePage } from './pages/ClearDatabasePage';
 import { CatalogPage } from './pages/CatalogPage';
 import { JournalPage } from './pages/JournalPage';
 import { ReceiveStockPage } from './pages/ReceiveStockPage';
 import { ReceiveProductsPage } from './pages/ReceiveProductsPage';
+import { ImportDocumentPage } from './pages/ImportDocumentPage';
 import { IssuePage } from './pages/IssuePage';
 import { ProductTypesPage } from './pages/ProductTypesPage';
 import { visibleSections } from './navigation';
@@ -250,9 +252,11 @@ function App() {
         <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
         <Route path="/receive" element={<ProtectedRoute><ReceiveStockPage /></ProtectedRoute>} />
         <Route path="/receive/products" element={<ProtectedRoute><ReceiveProductsPage /></ProtectedRoute>} />
+        <Route path="/receive/document" element={<ProtectedRoute><ImportDocumentPage /></ProtectedRoute>} />
         <Route path="/issue" element={<ProtectedRoute><IssuePage /></ProtectedRoute>} />
         <Route path="/admin/types" element={<ProtectedRoute adminOnly><ProductTypesPage /></ProtectedRoute>} />
         <Route path="/journal" element={<ProtectedRoute adminOnly><JournalPage /></ProtectedRoute>} />
+        <Route path="/admin/clear" element={<ProtectedRoute adminOnly><ClearDatabasePage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

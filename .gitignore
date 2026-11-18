@@ -60,3 +60,8 @@ alembic/versions/__pycache__/
 
 # Node
 node_modules/
+
+# Supplier documents: confidential
+docs/import_docs/
+tests/fixtures/*.xlsm
+.~lock.*

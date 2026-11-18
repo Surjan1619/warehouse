@@ -20,4 +20,24 @@ export const ACTION_LABELS = {
   product_receive: 'Приход товара',
   product_issue: 'Расход товара',
   assemble: 'Сборка',
+  import: 'Приход по документу',
+  reset: 'Очистка базы',
 };
+
+// What a database clearing deleted, per table
+export const TABLE_LABELS = {
+  activity_log: 'записей журнала',
+  cut_operations: 'резок',
+  stock_items: 'заготовок и кусков',
+  orders: 'заказов',
+  movements: 'движений товаров',
+  products: 'товаров',
+  assemblies: 'сборок',
+  document_imports: 'документов поставщика',
+  materials: 'материалов',
+  locations: 'мест хранения',
+  product_types: 'типов товаров',
+};
+
+// Groups of data a clearing can delete
+export const CLEAR_GROUP_LABELS = { stock: 'склад', journal: 'журнал', catalog: 'справочники' };

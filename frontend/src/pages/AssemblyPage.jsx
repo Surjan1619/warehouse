@@ -5,7 +5,7 @@ import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { STATUS_LABELS } from '../labels';
 import { useList } from '../hooks';
-import { groupByType, productLabel } from '../productOptions';
+import { amount, groupByType, productLabel, unitOf } from '../productOptions';
 import {
   addCut,
   addGoods,
@@ -164,7 +164,7 @@ const GoodsForm = ({ products, draft, onAdd }) => {
             </select>
           </label>
           <label>
-            Штук
+            Количество{product && `, ${unitOf(product)}`}
             <input
               type="number"
               value={form.quantity}
@@ -177,7 +177,7 @@ const GoodsForm = ({ products, draft, onAdd }) => {
           </label>
           {product && (
             <p className={tooMany ? 'field-error' : 'muted field-hint'} role={tooMany ? 'alert' : undefined}>
-              На складе {available} шт.{inDraft > 0 && `, уже в сборке ${inDraft}`}
+              На складе {amount(available, unitOf(product))}{inDraft > 0 && `, уже в сборке ${inDraft}`}
               {tooMany && ` — можно добавить не больше ${Math.max(available - inDraft, 0)}`}
             </p>
           )}
@@ -471,7 +471,7 @@ export const AssemblyPage = () => {
                       <thead>
                         <tr>
                           <th>Товар</th>
-                          <th className="num">Штук</th>
+                          <th className="num">Кол-во</th>
                           <th className="num">На складе</th>
                           <th></th>
                         </tr>
@@ -488,14 +488,14 @@ export const AssemblyPage = () => {
                                 {product ? product.name : `Товар №${line.product_id}`}
                                 {short && (
                                   <div className="field-error" role="alert">
-                                    На складе только {available} шт.
+                                    На складе только {amount(available, unitOf(product))}
                                   </div>
                                 )}
                               </td>
                               <td className="num">
                                 <input
                                   type="number"
-                                  aria-label="Штук"
+                                  aria-label="Количество"
                                   className="narrow"
                                   value={line.quantity || ''}
                                   min={1}
@@ -506,7 +506,7 @@ export const AssemblyPage = () => {
                                   }
                                 />
                               </td>
-                              <td className="num">{available}</td>
+                              <td className="num">{amount(available, unitOf(product))}</td>
                               <td className="actions">
                                 <button
                                   type="button"
@@ -536,7 +536,7 @@ export const AssemblyPage = () => {
                 ))}
                 {sum.goods > 0 && (
                   <div>
-                    Товаров: <b>{sum.goods} шт.</b> ({draft.goods.length} наим.)
+                    Товаров: <b>{draft.goods.length} наим.</b>
                   </div>
                 )}
               </div>
@@ -610,7 +610,7 @@ const Summary = ({ plan, draft, busy, onConfirm, onBack }) => {
         )}
         {plan.products.length > 0 && (
           <li>
-            <b>Списать товары:</b> {plan.products.map((p) => `${p.product.name} × ${p.quantity}`).join(', ')}
+            <b>Списать товары:</b> {plan.products.map((p) => `${p.product.name} — ${amount(p.quantity, unitOf(p.product))}`).join(', ')}
           </li>
         )}
       </ul>
@@ -649,7 +649,7 @@ const DoneCard = ({ assembly, onClose }) => (
       </div>
     ))}
     {assembly.goods.length > 0 && (
-      <p>Списано: {assembly.goods.map((g) => `${g.product.name} × ${g.quantity}`).join(', ')}</p>
+      <p>Списано: {assembly.goods.map((g) => `${g.product.name} — ${amount(g.quantity, unitOf(g.product))}`).join(', ')}</p>
     )}
   </section>
 );

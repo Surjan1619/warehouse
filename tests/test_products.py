@@ -189,3 +189,30 @@ async def test_journal_keeps_the_name_of_a_deleted_product(client, worker, admin
     [entry] = await journal(client, admin_headers)
     assert entry["product"] is None
     assert entry["details"]["product_name"] == "Ручка"
+
+
+async def test_unit_defaults_to_pieces(client, worker):
+    _, headers = worker
+    product = await make_product(client, headers, quantity=1)
+    assert product["unit"] == "шт"
+
+
+async def test_pairs_are_counted_as_they_come(client, worker, admin):
+    # 100 pairs stay 100: the unit says they are pairs
+    _, headers = worker
+    _, admin_headers = admin
+    response = await client.post("/products/", json={"name": "Ролик RGV/77", "quantity": 100, "unit": "пар"}, headers=headers)
+    assert response.status_code == 200, response.text
+    product = response.json()
+    assert (product["quantity"], product["unit"]) == (100, "пар")
+
+    await client.post(f"/products/{product['id']}/issue", json={"quantity": 5}, headers=headers)
+    listed = {p["id"]: p for p in (await client.get("/products/", headers=headers)).json()}
+    assert (listed[product["id"]]["quantity"], listed[product["id"]]["unit"]) == (95, "пар")
+    assert {e["details"]["unit"] for e in await journal(client, admin_headers)} == {"пар"}
+
+
+async def test_unknown_unit_is_rejected(client, worker):
+    _, headers = worker
+    response = await client.post("/products/", json={"name": "Профиль", "quantity": 1, "unit": "м"}, headers=headers)
+    assert response.status_code == 422

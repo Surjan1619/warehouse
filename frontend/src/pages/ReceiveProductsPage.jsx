@@ -4,11 +4,12 @@ import { api } from '../api';
 import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { useAction, useList, numberOrNull, textOrNull } from '../hooks';
-import { groupByType, productLabel } from '../productOptions';
+import { UNITS, UNIT_NAMES, amount, groupByType, productLabel, unitOf } from '../productOptions';
 
 const emptyProduct = {
   name: '',
   quantity: '1',
+  unit: 'шт',
   product_type_id: '',
   location_id: '',
   length: '',
@@ -25,6 +26,7 @@ const RestockCard = ({ products, reload }) => {
   const { error, busy, run } = useAction();
   // Shown after a restock with the quantity the server reports
   const [done, setDone] = useState('');
+  const chosen = products.find((p) => p.id === Number(productId));
 
   const restock = async (e) => {
     e.preventDefault();
@@ -35,7 +37,7 @@ const RestockCard = ({ products, reload }) => {
     }, '');
     if (!ok) return;
     setQuantity('1');
-    setDone(`«${updated.name}»: теперь ${updated.quantity} шт.`);
+    setDone(`«${updated.name}»: теперь ${amount(updated.quantity, unitOf(updated))}`);
     await reload();
   };
 
@@ -58,7 +60,7 @@ const RestockCard = ({ products, reload }) => {
             </select>
           </label>
           <label>
-            Пришло, шт.
+            Пришло, {unitOf(chosen)}
             <input
               type="number"
               value={quantity}
@@ -90,6 +92,7 @@ const NewProductCard = ({ reload }) => {
     const body = {
       name: form.name.trim(),
       quantity: Number(form.quantity),
+      unit: form.unit,
       product_type_id: numberOrNull(form.product_type_id),
       location_id: numberOrNull(form.location_id),
       length: numberOrNull(form.length),
@@ -100,8 +103,8 @@ const NewProductCard = ({ reload }) => {
     };
     const ok = await run(() => api('/products/', { method: 'POST', body }), `Товар «${body.name}» добавлен`);
     if (ok) {
-      // Keep type and location: goods are usually added in series
-      setForm({ ...emptyProduct, product_type_id: form.product_type_id, location_id: form.location_id });
+      // Keep unit, type and location: goods are usually added in series
+      setForm({ ...emptyProduct, unit: form.unit, product_type_id: form.product_type_id, location_id: form.location_id });
       await reload();
     }
   };
@@ -121,6 +124,12 @@ const NewProductCard = ({ reload }) => {
           <label>
             Количество
             <input type="number" value={form.quantity} onChange={set('quantity')} min={0} required />
+          </label>
+          <label>
+            Единица
+            <select value={form.unit} onChange={set('unit')}>
+              {UNITS.map((u) => <option key={u} value={u}>{u} — {UNIT_NAMES[u]}</option>)}
+            </select>
           </label>
           <label>
             Тип

@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, CheckConstraint, String, true, Integer, Float, ForeignKey, DateTime, func
+from sqlalchemy import Boolean, CheckConstraint, Date, String, true, Integer, Float, ForeignKey, DateTime, UniqueConstraint, func
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
@@ -52,6 +52,10 @@ class Movement(Base):
     assembly_id: Mapped[int | None] = mapped_column(
         ForeignKey("assemblies.id", name="fk_movements_assembly_id"), nullable=True, index=True
     )
+    # The supplier's document the goods came with, if they were imported from one
+    document_import_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_imports.id", name="fk_movements_document_import_id"), nullable=True, index=True
+    )
 
     product: Mapped["Product"] = relationship(back_populates="movements")
 
@@ -76,6 +80,10 @@ class Product(Base):
     shape: Mapped[str | None] = mapped_column(String(50), nullable=True)
     weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # What one unit of quantity is: "шт", "пар" (pair), "кмт" (set). 100 pairs stay 100.
+    unit: Mapped[str] = mapped_column(String(10), nullable=False, server_default="шт")
+    # The supplier's code ("Код" in the specification); imported rows are matched by it
+    sku: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     product_type_id: Mapped[int | None] = mapped_column(ForeignKey("product_types.id"), nullable=True)
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
@@ -157,6 +165,10 @@ class StockItem(Base):
     created_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", name="fk_stock_items_created_by_id"), nullable=True, index=True
     )
+    # The supplier's document the piece came with, if it was imported from one
+    document_import_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_imports.id", name="fk_stock_items_document_import_id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     material: Mapped["Material"] = relationship(back_populates="items")
@@ -227,6 +239,29 @@ class Assembly(Base):
     user: Mapped["User | None"] = relationship()
     cuts: Mapped[list["CutOperation"]] = relationship(order_by="CutOperation.id")
     movements: Mapped[list["Movement"]] = relationship(order_by="Movement.id")
+
+
+class DocumentImport(Base):
+    """
+    A supplier's specification put into stock from its Excel file. Remembered so
+    that the same delivery is not put into stock twice (e.g. its copy in another
+    currency): the number with the date, and the file itself, are unique.
+    """
+    __tablename__ = "document_imports"
+    __table_args__ = (UniqueConstraint("number", "doc_date", name="uq_document_imports_number_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    doc_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    supplier: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", name="fk_document_imports_user_id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+    user: Mapped["User | None"] = relationship()
 
 
 class ActivityEvent(Base):

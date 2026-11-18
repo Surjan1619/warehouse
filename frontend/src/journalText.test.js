@@ -52,10 +52,10 @@ test('an assembly lists its cuts and goods', () => {
       assembly_id: 7,
       name: 'Ворота',
       cut_operation_ids: [1, 2],
-      products: [{ product_id: 5, name: 'Мотор 600', quantity: 1 }, { product_id: 9, quantity: 2 }],
+      products: [{ product_id: 5, name: 'Мотор 600', quantity: 1 }, { product_id: 9, quantity: 2, unit: 'пар' }],
     },
   });
-  assert.equal(describeEvent(e), 'Сборка №7 «Ворота» — резок: 2; товары: Мотор 600 × 1, товар №9 × 2');
+  assert.equal(describeEvent(e), 'Сборка №7 «Ворота» — резок: 2; товары: Мотор 600 — 1 шт., товар №9 — 2 пар');
   assert.equal(subjectOf(e), '—');
 });
 
@@ -72,4 +72,34 @@ test('entries about stock items keep their wording', () => {
   assert.equal(plain(describeEvent(cut)), 'Разрезана T-000012 (6 000 мм): 3 000 + 1 500, остаток 1 500 мм');
   assert.equal(subjectOf(cut), 'Труба 40x20');
   assert.equal(plain(lengthOf(cut)), '6 000');
+});
+
+test('a clearing of the database tells what was deleted', () => {
+  const e = event('reset', { quantity: 0, details: { groups: ['stock', 'journal'], deleted: { stock_items: 4, activity_log: 9 } } });
+  assert.equal(describeEvent(e), 'База очищена: склад, журнал; удалено строк: 13');
+  assert.equal(subjectOf(e), '—');
+});
+
+test('goods counted in pairs or sets show their unit, the number stays as it came', () => {
+  const roller = { id: 3, name: 'Ролик RGV/77', product_type: null };
+  assert.equal(
+    describeEvent(event('product_receive', { product: roller, quantity: 100, details: { quantity_after: 100, unit: 'пар', new: true } })),
+    'Новый товар: Ролик RGV/77 +100 пар, осталось 100 пар',
+  );
+  assert.equal(
+    describeEvent(event('product_issue', { product: roller, quantity: 5, details: { quantity_after: 95, unit: 'пар' } })),
+    'Выдано: Ролик RGV/77 −5 пар, осталось 95 пар',
+  );
+});
+
+test('an import of a supplier document tells what it brought', () => {
+  const e = event('import', {
+    quantity: 38,
+    details: { number: '618E/7', supplier: 'ООО Поставщик', rows: 38, stock_pieces: 3075, new_materials: 12, new_products: 13 },
+  });
+  assert.equal(
+    describeEvent(e).replace(/\s/g, ' '),
+    'Приход по документу № 618E/7, ООО Поставщик — строк: 38, заготовок: 3 075, новых материалов: 12, новых товаров: 13',
+  );
+  assert.equal(subjectOf(e), '—');
 });

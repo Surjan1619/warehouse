@@ -4,9 +4,19 @@
 
 export const NO_TYPE = 'Без типа';
 
-/** "Мотор 600 · Моторы — 5 шт. (Стеллаж А)"; the type is left out when there is none. */
+/** What one unit of quantity is. 100 pairs stay 100: the unit tells they are pairs. */
+export const UNITS = ['шт', 'пар', 'кмт'];
+export const UNIT_NAMES = { шт: 'штуки', пар: 'пары', кмт: 'комплекты' };
+
+/** The unit of a product; goods added before units existed are pieces. */
+export const unitOf = (p) => p?.unit || 'шт';
+
+/** "5 шт.", "100 пар", "60 кмт". */
+export const amount = (n, unit = 'шт') => `${n ?? 0} ${unit === 'шт' ? 'шт.' : unit}`;
+
+/** "Ролик · Ролики — 100 пар (Стеллаж А)"; the type is left out when there is none. */
 export const productLabel = (p) =>
-  `${p.name}${p.product_type ? ` · ${p.product_type.name}` : ''} — ${p.quantity ?? 0} шт.` +
+  `${p.name}${p.product_type ? ` · ${p.product_type.name}` : ''} — ${amount(p.quantity, unitOf(p))}` +
   (p.location ? ` (${p.location.name})` : '');
 
 /**

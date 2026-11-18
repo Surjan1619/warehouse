@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { NO_TYPE, groupByType, productLabel } from './productOptions.js';
+import { NO_TYPE, amount, groupByType, productLabel, unitOf } from './productOptions.js';
 
 const product = (id, name, type, extra = {}) => ({
   id,
@@ -39,4 +39,16 @@ test('products are grouped by type, goods without a type last', () => {
 
 test('an empty list gives no groups', () => {
   assert.deepEqual(groupByType([]), []);
+});
+
+test('pairs and sets keep their number and show their unit', () => {
+  assert.equal(productLabel(product(2, 'Ролик RGV/77', null, { quantity: 100, unit: 'пар' })), 'Ролик RGV/77 — 100 пар');
+  assert.equal(amount(60, 'кмт'), '60 кмт');
+  assert.equal(amount(5, 'шт'), '5 шт.');
+});
+
+test('goods without a unit are pieces', () => {
+  assert.equal(unitOf({ quantity: 3 }), 'шт');
+  assert.equal(unitOf(undefined), 'шт');
+  assert.equal(amount(null), '0 шт.');
 });

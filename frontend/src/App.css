@@ -621,6 +621,46 @@ details.more summary {
   border-color: rgba(240, 168, 110, 0.4);
 }
 
+.action-reset {
+  color: #ff8080;
+  border-color: rgba(255, 128, 128, 0.6);
+}
+
+.danger-zone {
+  border: 1px solid rgba(255, 128, 128, 0.45);
+}
+
+.check-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0 0 1.2rem;
+}
+
+.check-list label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.check-list label.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.check-list input {
+  margin-top: 0.25rem;
+}
+
+.btn-danger {
+  background: #c94a4a;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #d85a5a;
+}
+
 .action-assemble {
   color: #c9a7ff;
   border-color: rgba(201, 167, 255, 0.4);
@@ -871,4 +911,45 @@ details.more summary {
   .assembly-side {
     position: static;
   }
+}
+
+/* Receiving from a supplier's document */
+.file-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 28rem;
+}
+
+.badge-new {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 0.6rem;
+  background: rgba(120, 200, 140, 0.15);
+  color: #8fd6a0;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.import-table td.field-error {
+  margin: 0;
+}
+
+/* Long supplier names wrap, so the numbers stay in view */
+.import-table td:nth-child(3) {
+  white-space: normal;
+  min-width: 12rem;
+}
+
+.import-types {
+  margin: 0.5rem 0 1rem;
+}
+
+.import-types summary {
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.import-types .form-row {
+  align-items: center;
 }

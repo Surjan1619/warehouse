@@ -129,7 +129,7 @@ async def create_assembly(
             product = await inventory.apply_quantity_change(
                 db, product_id, -quantity, inventory.ISSUE, user_id, assembly_id=assembly.id
             )
-            issued.append({"product_id": product_id, "name": product.name, "quantity": quantity})
+            issued.append({"product_id": product_id, "name": product.name, "quantity": quantity, "unit": product.unit or "шт"})
 
         activity.add_event(
             db, activity.ASSEMBLE, user_id,

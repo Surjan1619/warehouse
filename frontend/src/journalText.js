@@ -1,5 +1,7 @@
 // Wording of activity journal entries: what was done and with what.
 // Pure functions, tested in journalText.test.js.
+import { CLEAR_GROUP_LABELS } from './labels.js';
+import { amount } from './productOptions.js';
 
 const n = (value) => value.toLocaleString('ru-RU');
 const mm = (value) => `${n(value)} мм`;
@@ -13,8 +15,11 @@ export const productName = (event) => {
 
 const assemblyRef = (event) => (event.details?.assembly_id ? `, сборка №${event.details.assembly_id}` : '');
 
+// Entries written before units existed have none: those goods were pieces
+const unitIn = (event) => event.details?.unit ?? 'шт';
+
 const remaining = (event) =>
-  Number.isInteger(event.details?.quantity_after) ? `, осталось ${event.details.quantity_after} шт.` : '';
+  Number.isInteger(event.details?.quantity_after) ? `, осталось ${amount(event.details.quantity_after, unitIn(event))}` : '';
 
 /** One line telling what the entry is about. */
 export const describeEvent = (event) => {
@@ -36,18 +41,32 @@ export const describeEvent = (event) => {
     case 'scrap':
       return `В отходы ${code || 'заготовка'}`;
     case 'product_receive':
-      return `${details.new ? 'Новый товар' : 'Пополнение'}: ${productName(event)} +${event.quantity} шт.${remaining(event)}`;
+      return `${details.new ? 'Новый товар' : 'Пополнение'}: ${productName(event)} +${amount(event.quantity, unitIn(event))}${remaining(event)}`;
     case 'product_issue':
-      return `Выдано: ${productName(event)} −${event.quantity} шт.${remaining(event)}${assemblyRef(event)}`;
+      return `Выдано: ${productName(event)} −${amount(event.quantity, unitIn(event))}${remaining(event)}${assemblyRef(event)}`;
     case 'assemble': {
       const parts = [];
       const cuts = details.cut_operation_ids?.length ?? 0;
       if (cuts) parts.push(`резок: ${cuts}`);
-      const goods = (details.products || []).map((p) => `${p.name ?? `товар №${p.product_id}`} × ${p.quantity}`);
+      const goods = (details.products || []).map((p) => `${p.name ?? `товар №${p.product_id}`} — ${amount(p.quantity, p.unit)}`);
       if (goods.length) parts.push(`товары: ${goods.join(', ')}`);
       return `Сборка №${details.assembly_id ?? '?'}${details.name ? ` «${details.name}»` : ''}${
         parts.length ? ` — ${parts.join('; ')}` : ''
       }`;
+    }
+    case 'import': {
+      const doc = details.number ? `№ ${details.number}` : details.filename || '';
+      const from = details.supplier ? `, ${details.supplier}` : '';
+      const parts = [`строк: ${details.rows ?? event.quantity}`];
+      if (details.stock_pieces) parts.push(`заготовок: ${n(details.stock_pieces)}`);
+      if (details.new_materials) parts.push(`новых материалов: ${details.new_materials}`);
+      if (details.new_products) parts.push(`новых товаров: ${details.new_products}`);
+      return `Приход по документу ${doc}${from} — ${parts.join(', ')}`;
+    }
+    case 'reset': {
+      const groups = (details.groups || []).map((g) => CLEAR_GROUP_LABELS[g] ?? g).join(', ');
+      const rows = Object.values(details.deleted || {}).reduce((sum, value) => sum + value, 0);
+      return `База очищена: ${groups || '—'}; удалено строк: ${rows}`;
     }
     default:
       return event.action;

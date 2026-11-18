@@ -61,6 +61,30 @@ Authorization: Bearer <access_token>
 
 Пароль в ответах не возвращается.
 
+## Очистка базы — `/maintenance` (только администратор)
+
+### POST `/maintenance/clear`
+
+```json
+{"password": "<пароль администратора>", "stock": true, "journal": false, "catalog": false}
+```
+
+Удаляет выбранные группы одной транзакцией. Пользователи не удаляются никогда.
+
+| Группа | Что удаляется |
+|---|---|
+| `stock` | `stock_items`, `cut_operations`, `assemblies`, `orders`, `products`, `movements`, `document_imports` (после очистки тот же документ поставщика можно принять снова) |
+| `journal` | `activity_log` |
+| `catalog` | `materials`, `locations`, `product_types`; только вместе со `stock` |
+
+Кроме токена администратора нужен его **пароль**: украденного токена для удаления мало. Неверный пароль — **403** `Wrong password` (не 401, чтобы администратора не разлогинило). Ничего не выбрано, или справочники без склада — 422. Работник — 403, без токена — 401.
+
+Если журнал не очищается, его записи о стёртых заготовках, резках и товарах теряют ссылки (`stock_item_id`, `cut_operation_id`, `product_id`, при очистке справочников и `material_id` становятся `null`), но текст в `details` остаётся. В журнал добавляется запись `reset`: кто очистил, какие группы (`details.groups`) и сколько строк каждой таблицы удалено (`details.deleted`).
+
+Строки удаляются по одной, а не обрезкой таблицы: нумерация продолжается, поэтому номер вида `T-000123`, написанный на трубе до очистки, не достанется другой трубе.
+
+Ответ: `{"deleted": {"stock_items": 9, "cut_operations": 3, ...}}`.
+
 ## Журнал действий — `/activity` (только администратор)
 
 ### GET `/activity/`
@@ -70,7 +94,7 @@ Authorization: Bearer <access_token>
 | Параметр | Тип | Примечание |
 |---|---|---|
 | `user_id` | целое | кто сделал |
-| `action` | строка | `receive`, `cut`, `use`, `scrap`, `assemble`, `product_receive`, `product_issue` |
+| `action` | строка | `receive`, `cut`, `use`, `scrap`, `assemble`, `product_receive`, `product_issue`, `reset` |
 | `material_id` | целое | |
 | `stock_item_id` | целое | записи об одной заготовке |
 | `date_from` | дата-время | включительно; передавать со смещением, например `2026-11-10T00:00:00+04:00` |
@@ -121,6 +145,8 @@ Authorization: Bearer <access_token>
     "shape": "sheet",
     "weight": 31.4,
     "quantity": 10,
+    "unit": "шт",
+    "sku": null,
     "product_type_id": 1,
     "location_id": null,
     "product_type": {"id": 1, "name": "Сталь", "required_attributes": {}},
@@ -135,6 +161,7 @@ Authorization: Bearer <access_token>
 |---|---|---|---|
 | `name` | строка | да | не пустая |
 | `quantity` | целое | нет | ≥ 0, по умолчанию 0 |
+| `unit` | строка | нет | `шт` (по умолчанию), `пар` или `кмт`. 100 пар — это `quantity: 100, unit: "пар"` |
 | `length`, `width`, `thickness`, `weight` | число | нет | ≥ 0 |
 | `shape` | строка | нет | до 50 символов |
 | `product_type_id` | целое | нет | id существующего типа |
@@ -408,6 +435,54 @@ Authorization: Bearer <access_token>
 `client_key` (8–64 символа) создаёт браузер для каждого черновика. Повторная отправка с тем же ключом, в том числе одновременная, ничего не меняет и возвращает уже сохранённую сборку с кодом 200.
 
 Ответ (`AssemblyRead`): `id`, `name`, `note`, `user`, `created_at` (UTC с `+00:00`), `cuts[]` (как `CutRead`, с номерами полученных кусков), `goods[]` — `product` и `quantity`. Резку из сборки можно отменить как обычную (`POST /cuts/{id}/cancel`); отмены сборки целиком пока нет.
+
+## Приход по документу поставщика — `/imports`
+
+Спецификация поставщика (файл Excel `.xlsx` или `.xlsm`, до 5 МБ) принимается на склад целиком. Доступно любому вошедшему пользователю. Файл отправляется как `multipart/form-data` в поле `file`. Макросы не выполняются: читаются только значения ячеек (`repo/spec_parser.py`, без сторонних библиотек).
+
+Что программа ищет в файле:
+- ячейку «Спецификация № 618E/7 от 03.08.2026г.» — номер и дату;
+- строку заголовков с колонками «Наименование», «Ед. изм.», «Кол-во» (обязательны) и «Код», «Артикул», «Цвет», «Длина» (если есть); колонки ищутся по названию, а не по букве;
+- строки товаров до строки «Итого».
+
+Строка с длиной (в метрах, запятая допустима) и единицей `м` — это заготовки: количество в документе — метры всего, на склад идёт `метры / длина` одинаковых заготовок. Остальные строки — штучный товар в своей единице (`шт`, `пар`, `кмт`): 100 пар остаются 100.
+
+Строка находит материал или товар по **коду** (`materials.sku`, `products.sku`). Если такого нет, он создаётся: название — «Наименование Артикул, цвет N», код — из документа, единица у товара — из документа.
+
+### POST `/imports/preview`
+
+Читает файл и ничего не меняет. Ответ (`ImportPreview`):
+
+- `number`, `date`, `supplier`, `filename`;
+- `rows[]` — `line` (номер строки в Excel), `code`, `article`, `name`, `color`, `unit`, `quantity` (как в документе), `length_mm`, `kind` (`stock` / `goods` / `null` при ошибке), `pieces` (для заготовок), `count` (для товаров), `problem`, `title` (название для нового), `material` / `product` (что уже есть с этим кодом);
+- `summary` — `stock_rows`, `stock_pieces`, `new_materials`, `goods_rows`, `new_products`, `problems`;
+- `previous` — когда и кем этот документ уже принят (или `null`);
+- `can_import` — нет ошибок и документ ещё не принимали.
+
+Ошибки строки (`problem`): `not_whole_pieces` (метры не делятся на длину), `metres_without_length`, `bad_length`, `unknown_unit`, `fractional_quantity`, `no_quantity`, `no_name`, `unit_differs` (товар с этим кодом уже считается в других единицах).
+
+Файл целиком не читается — 422: `Not an Excel file`, `The file is too large`, `No table of goods in the file`, `No goods in the file`.
+
+### POST `/imports/`
+
+Тот же файл ещё раз (сервер не верит строкам из браузера и читает документ сам) и необязательные поля формы:
+
+| Поле | Что это |
+|---|---|
+| `location_id` | место хранения для всех новых заготовок и новых товаров |
+| `product_types` | JSON `{"<строка Excel>": <id типа>}` — тип для товара, создаваемого из этой строки |
+
+Всё выполняется одной транзакцией: заготовки (`note` — «Спецификация № …», `document_import_id`), пополнение товаров через `inventory.apply_quantity_change` с записью в `movements`, записи журнала `receive` / `product_receive` по каждой строке и одна `import` на документ. Любая ошибка откатывает всё.
+
+- Документ уже принят (тот же номер и дата или тот же файл) — **409** `This document is already in stock`.
+- В документе есть строки с ошибками — 422 `The document has rows that cannot be put into stock`.
+- Нет такого места или типа — 404.
+
+Ответ 201 (`ImportResult`): `import_id`, `number`, `date`, `supplier`, `filename`, `rows`, `stock_pieces`, `new_materials`, `new_products`, `result[]` — по каждой строке: для заготовок `pieces`, `length_mm`, `first_item_id`, `last_item_id` (номера, которые написать на трубах), для товаров `count`, `unit`, `quantity_after`.
+
+### GET `/imports/`
+
+Последние 50 принятых документов: `id`, `number`, `doc_date`, `supplier`, `filename`, `user`, `created_at` (UTC с `+00:00`).
 
 ## Не реализовано в API
 

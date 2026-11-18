@@ -19,6 +19,7 @@ export const SECTIONS = [
     pages: [
       { path: '/receive', title: 'Заготовки', hint: 'Принять трубы и профили, получить номера' },
       { path: '/receive/products', title: 'Товары', hint: 'Пополнить товар или завести новый' },
+      { path: '/receive/document', title: 'Из документа', hint: 'Загрузить спецификацию поставщика (Excel), всё добавится само' },
     ],
   },
   {
@@ -46,6 +47,7 @@ export const SECTIONS = [
       { path: '/admin', title: 'Пользователи', hint: 'Учётные записи работников' },
       { path: '/admin/types', title: 'Типы товаров', hint: 'Группы штучных товаров' },
       { path: '/journal', title: 'Журнал', hint: 'Кто, что и когда делал на складе' },
+      { path: '/admin/clear', title: 'Очистка базы', hint: 'Стереть склад, журнал или справочники' },
     ],
   },
 ];

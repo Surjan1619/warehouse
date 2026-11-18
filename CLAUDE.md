@@ -63,13 +63,16 @@ app/
   middleware/auth.py       # проверка Bearer-токена на всех путях, кроме публичных
   api/deps.py              # get_current_user (подключён ко всем роутерам), require_admin
   core/errors.py           # DomainError, NotFoundError — ошибки бизнес-правил
-  api/routers/             # auth, users, activity, products, locations, materials, orders, stock_items, cuts, assemblies
+  api/routers/             # auth, users, activity, products, locations, materials, orders, stock_items, cuts, assemblies, imports, maintenance
   repo/crud.py             # запросы к БД: users, products, product_types, locations
   repo/stock.py            # материалы, заказы, заготовки (поштучный учёт)
   repo/cutting.py          # резка: plan_cut, cut_item, cut_many, подбор (suggest_sources), раскладка (pack_pieces)
   repo/activity.py         # журнал действий: add_event (без commit), list_events
   repo/inventory.py        # приход и расход штучных товаров (receive_product, issue_product) с записью в movements
+  repo/maintenance.py      # очистка базы по группам (clear_database), с паролем администратора
   repo/assembly.py         # сборка: предпросмотр (plan_assembly) и завершение одной транзакцией (create_assembly)
+  repo/spec_parser.py      # чтение спецификации поставщика (xlsx/xlsm) без БД и без сторонних библиотек
+  repo/document_import.py  # приход по документу: предпросмотр и подтверждение одной транзакцией
   models/Alchemy_models.py # все ORM-модели и Base
   schemas/                 # Pydantic-схемы: user, product (+ location), stock, inventory, assembly
 alembic/versions/          # миграции
@@ -86,9 +89,11 @@ frontend/src/navigation.js # разделы сайта и их страницы,
 frontend/src/journalText.js # текст записей журнала (резки, товары, сборки), с тестами
 frontend/src/productOptions.js # подпись товара в списках (название · тип) и группировка по типу, с тестами
 frontend/src/assemblyDraft.js # черновик сборки (localStorage), запросы к /assemblies, с тестами
+frontend/src/importText.js # тексты предпросмотра и итогов прихода по документу, с тестами
 frontend/src/components/   # Layout (разделы и вкладки), Messages (ошибка / успех)
 frontend/src/pages/        # остатки: StockPage, ProductsPage; приход: ReceiveStockPage, ReceiveProductsPage;
-                           # расход: AssemblyPage, CutPage, IssuePage; CatalogPage; админ: ProductTypesPage, JournalPage
+                           # приход по документу: ImportDocumentPage;
+                           # расход: AssemblyPage, CutPage, IssuePage; CatalogPage; админ: ProductTypesPage, JournalPage, ClearDatabasePage
 ```
 
 ## Правила работы с кодом
@@ -100,6 +105,8 @@ frontend/src/pages/        # остатки: StockPage, ProductsPage; прихо
 - **Подбор заготовки** (`suggest_sources`) ранжирует по правилу best fit: меньше остаток — выше. Это решение владельца от 15.11.2026 («сначала самые экономные»). Подбор ищет одну заготовку под все куски; если такой нет, `plan_multi_cut` раскладывает куски по нескольким (`pack_pieces`, эвристика first fit decreasing), а `cut_many` режет их одной транзакцией.
 - **Резка без commit.** Логика резки живёт в `_apply_cut`, который не делает commit; `cut_item` и `cut_many` — обёртки с commit. Новый код, режущий заготовки, должен вызывать `_apply_cut` внутри своей транзакции.
 - **Сборка.** Всё, что берётся для одного изделия, — `assemblies`; резки и движения товаров ссылаются на неё через `assembly_id`. Завершение (`create_assembly`) режет через `_apply_cut` и списывает через `inventory.apply_quantity_change` (оба без commit) в одной транзакции; повторная отправка с тем же `client_key` возвращает уже сохранённую сборку. Режутся только заготовки `in_stock`, как в предпросмотре. Отмены сборки целиком пока нет.
+- **Единица товара.** У товара есть `unit`: `шт`, `пар` или `кмт`. Количество хранится как пришло: 100 пар — это `quantity = 100, unit = "пар"`, не 200. На сайте количество показывать через `amount()` из `productOptions.js`, в журнал единица пишется в `details.unit`.
+- **Приход по документу.** Спецификация поставщика читается `spec_parser` (без БД), сопоставляется по коду поставщика (`sku`) и принимается `document_import.confirm_import` одной транзакцией. Подтверждение заново читает файл, строкам из браузера не доверяет. Один документ (номер + дата или тот же файл) принимается один раз. Тесты — на настоящих файлах поставщика в `tests/fixtures/`.
 - **Журнал действий.** Запись в `activity_log` добавлять через `activity.add_event` в той же транзакции, что и само действие, до его `commit`.  Отдельный commit для журнала не делать: запись должна откатываться вместе с действием. Новое действие — новая константа в `repo/activity.py` и строка в таблице в `docs/DATABASE.md`. Удаления в журнал не пишутся (решение владельца от 15.11.2026).
 - **Время.** В базе время хранится в UTC без смещения, владелец работает в поясе UTC+4. Схема, отдающая время на сайт, должна добавлять `+00:00` (как `ActivityEventRead`), а фильтры по датам — приводиться к UTC (`_to_db_time` в `routers/activity.py`). Иначе страница покажет время со сдвигом на 4 часа.
 - **Ошибки в `repo`.** Бросать `DomainError` / `NotFoundError` из `app/core/errors.py`, а не `HTTPException`; обработчик в `main.py` превращает их в ответ.

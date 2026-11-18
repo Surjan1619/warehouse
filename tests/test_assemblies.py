@@ -287,7 +287,7 @@ async def test_history_keeps_author_and_links(client, worker, material, receive,
     assert len(assembled) == 1 and assembled[0].user_id == user.id
     assert assembled[0].details == {
         "assembly_id": assembly["id"], "name": "Ворота", "cut_operation_ids": [operation.id],
-        "products": [{"product_id": motor["id"], "name": "Мотор 600", "quantity": 2}],
+        "products": [{"product_id": motor["id"], "name": "Мотор 600", "quantity": 2, "unit": "шт"}],
     }
     issued = [e for e in events if e.action == "product_issue"]
     assert [(e.product_id, e.quantity, e.user_id, e.details["assembly_id"]) for e in issued] == [

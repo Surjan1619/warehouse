@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, field_serializer
 
 from app.schemas.stock import MaterialRead, UserBrief
 
-Action = Literal["receive", "cut", "use", "scrap", "assemble", "product_receive", "product_issue"]
+Action = Literal["receive", "cut", "use", "scrap", "assemble", "product_receive", "product_issue", "import", "reset"]
 
 
 class StockItemBrief(BaseModel):

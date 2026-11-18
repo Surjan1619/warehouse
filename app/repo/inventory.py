@@ -32,10 +32,13 @@ async def apply_quantity_change(
     change_type: str,
     user_id: int | None,
     assembly_id: int | None = None,
+    document_import_id: int | None = None,
+    new: bool = False,
 ) -> Product:
     """
     Add `delta` to the quantity and record the movement inside the caller's
-    transaction, without committing.
+    transaction, without committing. `new` marks the first receipt of a product
+    just created.
     """
     # Lock the row so that two simultaneous issues cannot both take the last piece
     result = await db.execute(select(Product).where(Product.id == product_id).with_for_update())
@@ -54,7 +57,7 @@ async def apply_quantity_change(
     product.quantity = current + delta
     add_product_event(
         db, product, activity.PRODUCT_RECEIVE if delta > 0 else activity.PRODUCT_ISSUE, abs(delta), user_id,
-        await type_name_of(db, product), assembly_id=assembly_id,
+        await type_name_of(db, product), assembly_id=assembly_id, document_import_id=document_import_id, new=new,
     )
     db.add(Movement(
         product_id=product.id,
@@ -62,6 +65,7 @@ async def apply_quantity_change(
         quantity_changed=delta,
         user_id=user_id,
         assembly_id=assembly_id,
+        document_import_id=document_import_id,
     ))
     await db.flush()
     return product
@@ -83,15 +87,23 @@ def add_product_event(
     type_name: str | None,
     assembly_id: int | None = None,
     new: bool = False,
+    document_import_id: int | None = None,
 ) -> None:
     """
     Journal a change of a piece good, in the caller's transaction. The name and
     type are copied into `details` so the entry stays readable after the
     product is deleted or renamed.
     """
-    details = {"product_name": product.name, "product_type": type_name, "quantity_after": product.quantity or 0}
+    details = {
+        "product_name": product.name,
+        "product_type": type_name,
+        "quantity_after": product.quantity or 0,
+        "unit": product.unit or "шт",
+    }
     if assembly_id is not None:
         details["assembly_id"] = assembly_id
+    if document_import_id is not None:
+        details["document_import_id"] = document_import_id
     if new:
         details["new"] = True
     activity.add_event(db, action, user_id, product_id=product.id, quantity=quantity, details=details)

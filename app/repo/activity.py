@@ -28,7 +28,14 @@ PRODUCT_RECEIVE = "product_receive"
 # Piece goods were taken out of stock, on their own or for an assembly
 PRODUCT_ISSUE = "product_issue"
 
-ACTIONS = frozenset({RECEIVE, CUT, USE, SCRAP, ASSEMBLE, PRODUCT_RECEIVE, PRODUCT_ISSUE})
+# A supplier's specification was put into stock; details tell the document and what it brought.
+# Each of its rows is journalled too, as `receive` or `product_receive`.
+IMPORT = "import"
+
+# An administrator cleared the database; details list the groups and the deleted rows
+RESET = "reset"
+
+ACTIONS = frozenset({RECEIVE, CUT, USE, SCRAP, ASSEMBLE, PRODUCT_RECEIVE, PRODUCT_ISSUE, IMPORT, RESET})
 
 EVENT_LOAD = (
     joinedload(ActivityEvent.user),

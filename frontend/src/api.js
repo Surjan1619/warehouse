@@ -46,16 +46,19 @@ const describe = (detail, fallback) => {
 
 /**
  * Call the API with the stored token.
- * `body` is sent as JSON; pass `form` instead for form-encoded data.
+ * `body` is sent as JSON; pass `form` instead for form-encoded data, or
+ * `files` (a FormData) to upload files: the browser sets its content type.
  * On 401 the session is cleared and the user is sent to the login page.
  */
-export async function api(path, { method = 'GET', body, form } = {}) {
+export async function api(path, { method = 'GET', body, form, files } = {}) {
   const headers = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let payload;
-  if (form) {
+  if (files) {
+    payload = files;
+  } else if (form) {
     payload = new URLSearchParams(form);
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
   } else if (body !== undefined) {

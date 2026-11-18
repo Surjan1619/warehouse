@@ -3,6 +3,7 @@ import { api } from '../api';
 import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { useAction, useList } from '../hooks';
+import { amount, unitOf } from '../productOptions';
 
 // Остатки штучных товаров. Приход и расход — в своих разделах.
 export const ProductsPage = () => {
@@ -47,7 +48,7 @@ export const ProductsPage = () => {
                     <td>{p.name}</td>
                     <td>{p.product_type?.name || '—'}</td>
                     <td>{p.location?.name || '—'}</td>
-                    <td className="num">{p.quantity ?? 0}</td>
+                    <td className="num">{amount(p.quantity, unitOf(p))}</td>
                     <td className="actions">
                       <button className="btn btn-ghost" disabled={busy} onClick={() => remove(p)}>Удалить</button>
                     </td>

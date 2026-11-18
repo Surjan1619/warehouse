@@ -1,4 +1,10 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, ConfigDict
+
+# What one unit of a product's quantity is: a piece, a pair or a set.
+# 100 pairs are stored as 100, the unit says they are pairs.
+Unit = Literal["шт", "пар", "кмт"]
 
 # --- Product Type Schemas ---
 class ProductTypeBase(BaseModel):
@@ -38,6 +44,7 @@ class ProductBase(BaseModel):
     shape: str | None = Field(None, max_length=50)
     weight: float | None = Field(None, ge=0)
     quantity: int | None = Field(None, ge=0)
+    unit: Unit = "шт"
     product_type_id: int | None = None
     location_id: int | None = None
 
@@ -53,12 +60,15 @@ class ProductUpdate(BaseModel):
     shape: str | None = Field(None, max_length=50)
     weight: float | None = Field(None, ge=0)
     quantity: int | None = Field(None, ge=0)
+    unit: Unit | None = None
     product_type_id: int | None = None
     location_id: int | None = None
 
 class ProductRead(ProductBase):
     """Schema for reading product data, including nested category and location info."""
     id: int
+    # The supplier's code, set for goods imported from a specification
+    sku: str | None = None
     product_type: ProductTypeRead | None = None 
     location: LocationRead | None = None
 

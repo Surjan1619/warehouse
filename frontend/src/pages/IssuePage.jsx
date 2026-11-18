@@ -4,7 +4,7 @@ import { api } from '../api';
 import { Layout } from '../components/Layout';
 import { Messages } from '../components/Messages';
 import { useAction, useList } from '../hooks';
-import { groupByType, productLabel } from '../productOptions';
+import { amount, groupByType, productLabel, unitOf } from '../productOptions';
 
 // Расход штучных товаров: моторы, пульты, крепёж уходят со склада
 export const IssuePage = () => {
@@ -24,6 +24,7 @@ export const IssuePage = () => {
     e.preventDefault();
     setDone('');
     const name = chosen?.name;
+    const unit = unitOf(chosen);
     let updated = null;
     const ok = await run(async () => {
       updated = await api(`/products/${productId}/issue`, { method: 'POST', body: { quantity: Number(quantity) } });
@@ -31,7 +32,7 @@ export const IssuePage = () => {
     if (!ok) return;
     setQuantity('1');
     if (updated.quantity === 0) setProductId('');
-    setDone(`Выдано: «${name}» × ${quantity}. Осталось ${updated.quantity} шт.`);
+    setDone(`Выдано: «${name}» — ${amount(quantity, unit)}. Осталось ${amount(updated.quantity, unit)}`);
     await reload();
   };
 
@@ -58,7 +59,7 @@ export const IssuePage = () => {
               </select>
             </label>
             <label>
-              Сколько выдать, шт.
+              Сколько выдать, {unitOf(chosen)}
               <input
                 type="number"
                 value={quantity}

@@ -37,6 +37,14 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
            * ──── 1 users
 ```
 
+Документ поставщика, загруженный из файла Excel, связывает принятые по нему заготовки и движения товаров:
+
+```
+document_imports 1 ──── * stock_items   (stock_items.document_import_id)
+                 1 ──── * movements     (movements.document_import_id)
+                 * ──── 1 users
+```
+
 `users` связана с `cut_operations` (кто резал) и `stock_items` (кто создал запись).
 
 ## Таблицы
@@ -76,6 +84,8 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `length`, `width`, `thickness`, `weight` | float | nullable |
 | `shape` | varchar(50) | nullable |
 | `quantity` | integer | nullable |
+| `unit` | varchar(10) | `шт`, `пар` или `кмт`, по умолчанию `шт`. Что считается одной единицей: 100 пар хранятся как 100, а не как 200 |
+| `sku` | varchar(50) | nullable, уникальный (`uq_products_sku`); код поставщика («Код» в спецификации), по нему строки документа находят товар |
 | `product_type_id` | integer | FK → `product_types.id`, nullable |
 | `location_id` | integer | FK → `locations.id`, nullable |
 
@@ -90,6 +100,7 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `created_at` | timestamp | `now()` на стороне БД |
 | `user_id` | integer | FK → `users.id` (`fk_movements_user_id`), nullable; кто изменил количество |
 | `assembly_id` | integer | FK → `assemblies.id` (`fk_movements_assembly_id`), nullable, индекс; для какой сборки выдан товар |
+| `document_import_id` | integer | FK → `document_imports.id` (`fk_movements_document_import_id`), nullable, индекс; по какому документу поставщика пришёл товар |
 
 У внешнего ключа `movements.product_id` нет каскада. Товар с историей движений `delete_product` не удаляет и отвечает 409, чтобы история прихода и расхода не пропала.
 
@@ -105,6 +116,23 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `client_key` | varchar(64) | уникальный; ключ черновика из браузера, повторная отправка того же черновика возвращает уже сохранённую сборку |
 | `user_id` | integer | FK → `users.id` (`fk_assemblies_user_id`), nullable, индекс; кто собирал |
 | `created_at` | timestamp | `now()`, индекс |
+
+### `document_imports`
+
+Спецификация поставщика, принятая на склад из файла Excel (`repo/document_import.py`). Хранится, чтобы одну поставку нельзя было принять дважды, в том числе её копию в другой валюте.
+
+| Колонка | Тип | Примечание |
+|---|---|---|
+| `id` | integer | PK |
+| `number` | varchar(50) | nullable; номер спецификации, например `618E/7` |
+| `doc_date` | date | nullable; дата спецификации |
+| `supplier` | varchar(255) | nullable; поставщик из шапки документа |
+| `filename` | varchar(255) | nullable; имя загруженного файла |
+| `file_sha256` | varchar(64) | уникальный (`uq_document_imports_file_sha256`); хэш файла |
+| `user_id` | integer | FK → `users.id` (`fk_document_imports_user_id`), nullable, индекс; кто принял |
+| `created_at` | timestamp | `now()`, индекс |
+
+Пара `number` + `doc_date` уникальна (`uq_document_imports_number_date`). Документ без номера отличается только хэшем файла.
 
 ### `materials`
 
@@ -146,6 +174,7 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `order_id` | integer | FK → `orders.id`, nullable |
 | `note` | varchar(500) | nullable |
 | `created_by_id` | integer | FK → `users.id`, nullable; кто принял заготовку или сделал резку, из которой она получилась. Пусто у заготовок, принятых до 15.11.2026 |
+| `document_import_id` | integer | FK → `document_imports.id` (`fk_stock_items_document_import_id`), nullable, индекс; по какому документу поставщика принята |
 | `created_at` | timestamp | `now()` |
 
 ### `cut_operations`
@@ -172,7 +201,7 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `id` | integer | PK |
 | `created_at` | timestamp | `now()`, индекс |
 | `user_id` | integer | FK → `users.id`, nullable; кто сделал |
-| `action` | varchar(30) | `receive` (приход заготовок), `cut` (резка), `use` (израсходовано), `scrap` (отходы), `assemble` (сборка), `product_receive` (приход товара), `product_issue` (расход товара) |
+| `action` | varchar(30) | `receive` (приход заготовок), `cut` (резка), `use` (израсходовано), `scrap` (отходы), `assemble` (сборка), `product_receive` (приход товара), `product_issue` (расход товара), `import` (приход по документу), `reset` (очистка базы) |
 | `material_id` | integer | FK → `materials.id`, nullable |
 | `stock_item_id` | integer | FK → `stock_items.id`, nullable; заготовка, если действие касается одной |
 | `cut_operation_id` | integer | FK → `cut_operations.id`, nullable |
@@ -189,9 +218,11 @@ assemblies 1 ──── * cut_operations      (cut_operations.assembly_id)
 | `cut` | резка | 1 | длина разрезанной заготовки | `stock_item_id` — что резали; `details`: длины кусков и остаток |
 | `use` | куски помечены использованными: при резке, кнопкой `use`, при закрытии заказа | число кусков | их суммарная длина | при резке одна запись на все использованные куски |
 | `scrap` | остаток ушёл в отходы при резке или заготовка списана вручную | 1 | длина | `stock_item_id` — что списано |
-| `product_receive` | товар пополнен или заведён с количеством; одна запись на действие | сколько штук пришло | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after` (сколько стало), `new` у нового товара |
-| `product_issue` | товар выдан со склада: «Расход → Товары» или в сборке | сколько штук выдано | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after`, `assembly_id` если выдано в сборке |
-| `assemble` | сборка завершена; одна запись на сборку | 0 | 0 | `details`: `assembly_id`, `name`, `cut_operation_ids`, `products` (id и количество). Нули — чтобы не считать дважды: куски уже учтены записями `cut` и `use` |
+| `product_receive` | товар пополнен или заведён с количеством; одна запись на действие | сколько единиц пришло | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after` (сколько стало), `unit`, `new` у нового товара, `document_import_id` если пришло по документу |
+| `product_issue` | товар выдан со склада: «Расход → Товары» или в сборке | сколько единиц выдано | 0 | `product_id`; `details`: `product_name`, `product_type`, `quantity_after`, `unit`, `assembly_id` если выдано в сборке |
+| `import` | спецификация поставщика принята из файла (`POST /imports/`); одна запись на документ | число строк документа | 0 | `details`: `document_import_id`, `number`, `date`, `supplier`, `filename`, `rows`, `stock_pieces`, `new_materials`, `new_products`. Каждая строка документа записана ещё и как `receive` или `product_receive` (у `receive` в `details` есть `document_import_id`), поэтому здесь нули |
+| `reset` | администратор очистил базу (`POST /maintenance/clear`) | 0 | 0 | `details`: `groups` — что очищено (`stock`, `journal`, `catalog`), `deleted` — сколько строк какой таблицы удалено |
+| `assemble` | сборка завершена; одна запись на сборку | 0 | 0 | `details`: `assembly_id`, `name`, `cut_operation_ids`, `products` (id, название, количество, единица). Нули — чтобы не считать дважды: куски уже учтены записями `cut` и `use` |
 
 Записи резки (`cut`, `use`, `scrap`) связаны общим `cut_operation_id`. Отчёты строятся как суммы `quantity` и `length_mm` по этой таблице.
 
@@ -220,6 +251,8 @@ Alembic, асинхронный режим. Адрес БД берётся из 
 | `3e553887126a` | `movements.user_id`; `upgrade` и `downgrade` проверены |
 | `22cd031e4c95` | Таблица `assemblies`, `cut_operations.assembly_id`, `movements.assembly_id`; `upgrade` и `downgrade` проверены |
 | `0ba50d8723d9` | `activity_log.product_id`; все прежние строки `movements` перенесены в журнал как `product_receive` / `product_issue` (с автором и временем, `details.from_movements = true`). `downgrade` удаляет эти записи; проверено дважды подряд, без задвоения |
+| `f6b8d0e2a457` | `products.unit` (по умолчанию `шт`); `upgrade` и `downgrade` проверены |
+| `c4459859a739` | Таблица `document_imports`, `products.sku`, `stock_items.document_import_id`, `movements.document_import_id`; `upgrade` и `downgrade` проверены |
 
 Ревизия `b2d4a6c8e013` пока не добавлена в git. Ревизия `a1c3f5e7b902` написана вручную с именованными ограничениями; её `upgrade` и `downgrade` проверены на живой базе.
 

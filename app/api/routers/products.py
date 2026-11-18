@@ -49,7 +49,8 @@ async def add_product(
     return await create_product(
         db, 
         name=product_in.name,
-        quantity=product_in.quantity or 0, 
+        quantity=product_in.quantity or 0,
+        unit=product_in.unit,
         product_type_id=product_in.product_type_id,
         location_id=product_in.location_id,
         length=product_in.length,
